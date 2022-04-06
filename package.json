@@ -1,0 +1,23 @@
+{
+  "name": "mongoose-track-changes",
+  "version": "1.0.0",
+  "description": "A Mongoose plugin to keep track of the changes that happen over a document",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Walcu-Engineering/mongoose-track-changes.git"
+  },
+  "keywords": [
+    "mongoose",
+    "plugin"
+  ],
+  "author": "Walcu",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Walcu-Engineering/mongoose-track-changes/issues"
+  },
+  "homepage": "https://github.com/Walcu-Engineering/mongoose-track-changes#readme"
+}

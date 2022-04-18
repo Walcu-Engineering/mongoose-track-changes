@@ -31,6 +31,8 @@ test('Mongoose-track-changes', async () => {
   await task.save();
   const saved_task = await mongoose.models.Task.findOne({});
   debugger;
+  saved_task.notification.notify_to[1] = mongoose.Types.ObjectId();
+  debugger;
 });
 
 

@@ -160,10 +160,10 @@ const changesTracker = schema => {
     //a change for the nested path.
     return ancestor_changes.some(ancestor_change => {
       //Now the old_value of the ancestor_change is where we have to
-      //check if the value has changed or not, but now we cannot use the 
+      //check if the value has changed or not, but now we cannot use the
       //requested path because if the requested path was '/a/b/c/d/e' and
       //the ancestor path is '/a/b/c', we have to check the subpath
-      //'/d/e'. So we have to extract the subpath from the requested path 
+      //'/d/e'. So we have to extract the subpath from the requested path
       const subpath = path.split(ancestor_change.path)[1];
       //Once we have the subpath, we have to read the old value, and we need
       //a function in order to achieve this because we have to take into

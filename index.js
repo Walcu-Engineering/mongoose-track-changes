@@ -130,8 +130,63 @@ const changesTracker = schema => {
     }
   }
 
+  /*
+   * In this function we will have a similar problem than the one we had to
+   * address in the previous function:
+   *
+   * Given a change to the path '/a/b', if the pathHasChanged function is called
+   * for the path 'a/b/c/d' we cannot determine if that path has actually
+   * changed or not by just checking the changes paths.
+   *
+   * In order to resolve this we have to check if there is a change whose's path
+   * is an ancestor of the requested path. If this is the case, then we have to
+   * take the whole ancestor's old value, and compare the nested old value with
+   * the current nested old value and check if it is the same in order to
+   * determine if the requested path has changed or not.
+   */
   schema.methods.pathHasChanged = function(path){
-    return (this._changes || []).some(change => change.path === path);
+    if((this._changes || []).some(change => change.path === path)) return true; //This should be the most common case
+    //Ok, we are not lucky so we have to check if there is any change whose's
+    //path is an ancestor for the requested path
+    const ancestor_changes = (this._changes || []).filter(change => path.startsWith(change.path));
+    // If there aren't any changes whose path is an ancestor of the requested
+    // path means that there has not been any change that involves the requested
+    // path, so the requested path has not changed, and we can stop the execution
+    // of the function only for performance reasons
+    if(ancestor_changes.length === 0) return false;
+    //If there are several changes that affect to ancestors, we have to check
+    //all the changes because if the nearest ancestor has not the change, it
+    //does not mean that another change that is a farther ancestor includes
+    //a change for the nested path.
+    return ancestor_changes.some(ancestor_change => {
+      //Now the old_value of the ancestor_change is where we have to
+      //check if the value has changed or not, but now we cannot use the 
+      //requested path because if the requested path was '/a/b/c/d/e' and
+      //the ancestor path is '/a/b/c', we have to check the subpath
+      //'/d/e'. So we have to extract the subpath from the requested path 
+      const subpath = path.split(ancestor_change.path)[1];
+      //Once we have the subpath, we have to read the old value, and we need
+      //a function in order to achieve this because we have to take into
+      //account this scenario:
+      //
+      //old value for path '/a/b/c' is {d: {e: 1}}; but the requested subpath
+      //is /d/e/f' that path does not exist in old value, so we need a mechanism
+      //that given that path returns undefined.
+      const old_subpath_value = subpath.split('/').filter(p => p).reduce((subpath_part_value, subpath_part, i, path_array) => {
+        if(subpath_part_value == null){
+          if(i < path_array.length - 1) return {};
+          return subpath_part_value;
+        }
+        return subpath_part_value[subpath_part];
+      }, ancestor_change.old_value);
+      if(old_subpath_value === undefined) return false; // this means that the requested subpath is not present in the old value, so that subpath has not changed
+      //If we reach this line means that the subpath was present in the old value,
+      //so we have to compare the old value with the current one to determine if
+      //the value has changed or not.
+      const mongo_nested_path = path.split('/').filter(p => p).join('.');
+      const current_nested_value = this.get(mongo_nested_path);
+      return util.isDeepStrictEqual(current_nested_value, old_subpath_value);
+    });
   }
 }
 

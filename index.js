@@ -143,6 +143,8 @@ const changesTracker = schema => {
    * take the whole ancestor's old value, and compare the nested old value with
    * the current nested old value and check if it is the same in order to
    * determine if the requested path has changed or not.
+   *
+   * @param path: String with the format JSON pointer as defined in RFC6901
    */
   schema.methods.pathHasChanged = function(path){
     if((this._changes || []).some(change => change.path === path)) return true; //This should be the most common case

@@ -14,46 +14,32 @@ const isAncestor = (path1, path2) => {
   return path1_parts.every((path1_part, i) => path2_parts[i] === path1_part);
 }
 
-const undo = (doc, affected_changes) => {
-  if(affected_changes.length === 1 && affected_changes[0].path === ''){
-    return affected_changes[0].old_value;
+const undo = (doc, change) => {
+  if(change.path === ''){
+    return change.old_value;
   }else{
-    return affected_changes.reduce((reverted, change) => {
-      if(change.path === ''){
-        return change.old_value;
-      }else{
-        if(reverted && (reverted.schema || reverted.constructor.name === 'Object' || (reverted instanceof Array))){//Under this reverted types we have to go deeper with the recursion
-          return (reverted.schema && Object.values(reverted.schema.paths).map(schema => [schema.path, reverted.get(schema.path)])
-            || reverted.constructor.name === 'Object' && Object.entries(reverted)
-            || reverted.map((val, i) => [i, val])
-          ).map(([key, value]) => {
-            const change_first_path_part = change.path.split('/').slice(1)[0];
-            if(change_first_path_part === key){//This change affects to this key, so we go deep inside
-            }else{//This change does not affect to this object key, so we return the current document key value
-            }
-            const changes_that_affect_to_this_key = affected_changes
-              .filter(change => {
-                return change_first_path_part === key;
-              }).map(change => {
-                const rerooted_change_pointer = change.path.split('/').slice(2).join('/'); //if the rerooted change's path is the empty string, we don't want the path to be /.
-                return {path: rerooted_change_pointer.length > 0 ? `/${rerooted_change_pointer}` : rerooted_change_pointer, old_value: change.old_value}; 
-              });
-            if(changes_that_affect_to_this_key.length > 0){//we have to go deeper
-              if(reverted instanceof Array)//If reverted is an array subreverted is an array item, so the outer map will aready be the recursed array, and we will not want to create an object indexed by the array position index.
-                return undo(value, changes_that_affect_to_this_key);
-              return [key, undo(value, changes_that_affect_to_this_key)];
-            }else{
-              return [key, value];
-            }
-          }).reduce((c, n) => {
-            c[n[0]] = n[1]; //we use this notation instead of ({...c, ...n}) because it is cheaper in the consumption of resources, and we want to be the fastest we can.
-            return c;
-          }, {});
-        }else{
-          return reverted;
+    if(doc && (doc.schema || doc.constructor.name === 'Object' || (doc instanceof Array))){//Under this reverted types we have to go deeper with the recursion
+      return (doc.schema && Object.values(doc.schema.paths).map(schema => [schema.path, doc.get(schema.path)])
+        || doc.constructor.name === 'Object' && Object.entries(doc)
+        || doc.map((val, i) => [i, val])
+      ).map(([key, value]) => {
+        const change_first_path_part = change.path.split('/').slice(1)[0];
+        if(change_first_path_part === key){//This change affects to this key, so we go deep inside
+          const rerooted_change_pointer = change.path.split('/').slice(2).join('/'); //if the rerooted change's path is the empty string, we don't want the path to be /.
+          const rerooted_change = {path: rerooted_change_pointer.length > 0 ? `/${rerooted_change_pointer}` : rerooted_change_pointer, old_value: change.old_value};
+          if(doc instanceof Array)//If reverted is an array subreverted is an array item, so the outer map will aready be the recursed array, and we will not want to create an object indexed by the array position index.
+            return undo(value, rerooted_change);
+          return [key, undo(value, rerooted_change)];
+        }else{//This change does not affect to this object key, so we return the current document key value
+          return [key, value];
         }
-      }
-    }, doc);
+      }).reduce((c, n) => {
+        c[n[0]] = n[1]; //we use this notation instead of ({...c, ...n}) because it is cheaper in the consumption of resources, and we want to be the fastest we can.
+        return c;
+      }, {});
+    }else{
+      return doc;
+    }
   }
 }
 
@@ -182,7 +168,7 @@ const changesTracker = schema => {
           change.path = path.length > 0 ? change.path.split(shortest_path)[1] : change.path;
           return change;
         });
-        const old_value = undo(shortest_path_subdocument, rerooted_affected_changes);
+        const old_value = rerooted_affected_changes.reduce((reverted, change) => undo(reverted, change), shortest_path_subdocument);
         const rerooted_requested_path = path.split(shortest_path)[1];
         return getPathValue(old_value, rerooted_requested_path);
       }

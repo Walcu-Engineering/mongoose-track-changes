@@ -165,7 +165,16 @@ const changesTracker = schema => {
       const path_change = this._changes.find(change => change.path === path); //This is for the optimization. This should be the most used case.
       if(path_change) return path_change.old_value;//This is the dessirable case
       const affected_changes = this._changes.filter(change => isAncestor(change.path, path) || isAncestor(path, change.path));
-      if(affected_changes.length > 0) return getPathValue(undo(this, affected_changes), path);
+      if(affected_changes.length > 0){
+        const shortest_path = affected_changes // if requested path is /a/b/c/d but there is a change for the path /a/b we have to undo the whole /a/b path to take the old value for the requested path. And the same way if the requested path is /a and there is a change that affects to /a/b/c we have to undo everything for /a. And the values that have not changed will be pointers.
+          .reduce((current_shortest_path, {path}) => path.length > current_shortest_path.length ? current_shortest_path : path, path);
+        const shortest_path_subdocument = shortest_path.length === 0 ? this : this.get(shortest_path.split('/').slice(1).join('.')); //This is the value that have to be reverted
+        const rerooted_affected_changes = affected_changes.map(change => {//now we have to change the path for the changes because the root document has changed.
+          change.path = path.length > 0 ? change.path.split(shortest_path)[1] : change.path;
+          return change;
+        });
+        return getPathValue(undo(shortest_path_subdocument, affected_changes), path);
+      }
     }
     return path ? this.get(path.split('/').slice(1).join('.')) : this;
   }

@@ -1,5 +1,52 @@
 const util = require('util');
-const jsonpatch = require('fast-json-patch')
+
+const getPathValue = (doc, path) => path.split('/').filter(p => p).reduce((subpath_part_value, subpath_part, i, path_array) => {
+  if(subpath_part_value == null){
+    if(i < path_array.length - 1) return {};
+    return subpath_part_value;
+  }
+  return subpath_part_value[subpath_part];
+}, doc);
+
+const isAncestor = (path1, path2) => {
+  const path1_parts = path1.split('/').slice(1);
+  const path2_parts = path2.split('/').slice(1);
+  return path1_parts.every((path1_part, i) => path2_parts[i] === path1_part);
+}
+
+const undo = (doc, affected_changes) => {
+  if(affected_changes.length === 1 && affected_changes[0].path === ''){
+    return affected_changes[0].old_value;
+  }else{
+    if(doc && (doc.schema || doc.constructor.name === 'Object' || (doc instanceof Array))){//Under this doc types we have to go deeper with the recursion
+      return (doc.schema && Object.values(doc.schema.paths).map(schema => [schema.path, doc.get(schema.path)])
+        || doc.constructor.name === 'Object' && Object.entries(doc)
+        || doc.map((val, i) => [i, val])
+      ).map(([key, value]) => {
+        const changes_that_affect_to_this_key = affected_changes
+          .filter(change => {
+            const change_first_path_part = change.path.split('/').slice(1)[0];
+            return change_first_path_part === key;
+          }).map(change => {
+            const rerooted_change_pointer = change.path.split('/').slice(2).join('/'); //if the rerooted change's path is the empty string, we don't want the path to be /.
+            return {path: rerooted_change_pointer.length > 0 ? `/${rerooted_change_pointer}` : rerooted_change_pointer, old_value: change.old_value}; 
+          });
+        if(changes_that_affect_to_this_key.length > 0){//we have to go deeper
+          if(doc instanceof Array)//If doc is an array subdoc is an array item, so the outer map will aready be the recursed array, and we will not want to create an object indexed by the array position index.
+            return undo(value, changes_that_affect_to_this_key);
+          return [key, undo(value, changes_that_affect_to_this_key)];
+        }else{
+          return [key, value];
+        }
+      }).reduce((c, n) => {
+        c[n[0]] = n[1]; //we use this notation instead of ({...c, ...n}) because it is cheaper in the consumption of resources, and we want to be the fastest we can.
+        return c;
+      }, {});
+    }else{
+      return doc;
+    }
+  }
+}
 
 const proxy_handler = {
   apply: function (target, this_arg, arglist){
@@ -25,7 +72,7 @@ const changesTracker = schema => {
     const markModifiedProxy = new Proxy(doc.markModified, proxy_handler);
     doc.$set = $setProxy;
     doc.set = setProxy;
-    doc.markModified= markModifiedProxy;
+    doc.markModified = markModifiedProxy;
   });
 
   schema.pre('save', function(next){
@@ -35,7 +82,7 @@ const changesTracker = schema => {
       const markModifiedProxy = new Proxy(this.markModified, proxy_handler);
       this.$set = $setProxy;
       this.set = setProxy;
-      this.markModified= markModifiedProxy;
+      this.markModified = markModifiedProxy;
       this._changes = [{op: 'replace', path: '', old_value: undefined}]
     }
     next();
@@ -110,24 +157,17 @@ const changesTracker = schema => {
    *
    * @param path: String with the format JSON pointer as defined in RFC6901
    */
-  schema.methods.getPreviousValue = function(path){
-    const path_change = (this._changes || []).find(change => change.path === path); //This is for the optimization. This should be the most used case.
-    if(path_change){
-      return path_change.old_value;
-    }else{
-      const affected_changes = (this._changes || []).filter(change => change.path.startsWith(path)); //Let's see if there are changes for more deeply nested paths than the requested path
-      if(affected_changes.length > 0){//Shit! we have to do the complex process.
-        const mongo_path = path.split('/').filter(p => p).join('.');
-        const path_subdocument = this.get(mongo_path);
-        const path_subobject = path_subdocument && path_subdocument.toObject() || {}; // to get a clone of the subdocument or an empty object if the subdocument does not exist. This is the new root document
-        //if the change path is '/a/b/c/e' but the requested path is '/a/b', the change path with the new root is '/c/e';
-        const revert_patch = affected_changes
-          .map(change => ({path: change.path.replace(path, ''), ...(change.old_value === undefined ? ({op: 'remove'}) : ({op: 'replace', value: change.old_value}))}));
-        return jsonpatch.applyPatch(path_subobject, revert_patch).newDocument;
-      }else{//There are not changes for the given path
-        return undefined;
-      }
+  schema.methods.getPreviousValue = function(path = ''){
+    if(typeof(path) !== 'string'){
+      throw new Error('path must be a string');
     }
+    if((this._changes || []).length > 0){
+      const path_change = this._changes.find(change => change.path === path); //This is for the optimization. This should be the most used case.
+      if(path_change) return path_change.old_value;//This is the dessirable case
+      const affected_changes = this._changes.filter(change => isAncestor(change.path, path) || isAncestor(path, change.path));
+      if(affected_changes.length > 0) return getPathValue(undo(this, affected_changes), path);
+    }
+    return path ? this.get(path.split('/').slice(1).join('.')) : this;
   }
 
   /*
@@ -147,20 +187,20 @@ const changesTracker = schema => {
    * @param path: String with the format JSON pointer as defined in RFC6901
    */
   schema.methods.pathHasChanged = function(path){
-    if((this._changes || []).some(change => change.path === path)) return true; //This should be the most common case
+    if(typeof(path) !== 'string'){
+      throw new Error('path must be a string');
+    }
+    const exact_change = ((this._changes || []).find(change => change.path === path)); //This should be the most common case
+    if(exact_change && !util.isDeepStrictEqual(exact_change.old_value, this.get(exact_change.path.split('/').slice(1).join('.')))) return true;//we have to do this ugly comparission because the plugin is not able to detecte if a change is giving the same value to the given path than the value that was previous set to that path.
     //Ok, we are not lucky so we have to check if there is any change whose's
-    //path is an ancestor for the requested path
-    const ancestor_changes = (this._changes || []).filter(change => path.startsWith(change.path));
-    // If there aren't any changes whose path is an ancestor of the requested
-    // path means that there has not been any change that involves the requested
-    // path, so the requested path has not changed, and we can stop the execution
-    // of the function only for performance reasons
-    if(ancestor_changes.length === 0) return false;
+    //path is an ancestor for the requested path. Example change's path is /a/b
+    //and the requested path is /a/b/c
+    const ancestor_changes = (this._changes || []).filter(change => isAncestor(change.path, path));
     //If there are several changes that affect to ancestors, we have to check
     //all the changes because if the nearest ancestor has not the change, it
     //does not mean that another change that is a farther ancestor includes
     //a change for the nested path.
-    return ancestor_changes.some(ancestor_change => {
+    const ancestor_changes_have_affected_to_path = ancestor_changes.some(ancestor_change => {
       //Now the old_value of the ancestor_change is where we have to
       //check if the value has changed or not, but now we cannot use the
       //requested path because if the requested path was '/a/b/c/d/e' and
@@ -174,21 +214,41 @@ const changesTracker = schema => {
       //old value for path '/a/b/c' is {d: {e: 1}}; but the requested subpath
       //is /d/e/f' that path does not exist in old value, so we need a mechanism
       //that given that path returns undefined.
-      const old_subpath_value = subpath.split('/').filter(p => p).reduce((subpath_part_value, subpath_part, i, path_array) => {
-        if(subpath_part_value == null){
-          if(i < path_array.length - 1) return {};
-          return subpath_part_value;
-        }
-        return subpath_part_value[subpath_part];
-      }, ancestor_change.old_value);
+      const old_subpath_value = getPathValue(ancestor_change.old_value, subpath);
       if(old_subpath_value === undefined) return false; // this means that the requested subpath is not present in the old value, so that subpath has not changed
       //If we reach this line means that the subpath was present in the old value,
       //so we have to compare the old value with the current one to determine if
       //the value has changed or not.
       const mongo_nested_path = path.split('/').filter(p => p).join('.');
       const current_nested_value = this.get(mongo_nested_path);
-      return util.isDeepStrictEqual(current_nested_value, old_subpath_value);
+      return !util.isDeepStrictEqual(current_nested_value, old_subpath_value);
     });
+    if(ancestor_changes_have_affected_to_path) return true//This is a shortcut to avoid the next calculations
+    //now we have to ckeck the other case, this means that the requested path
+    //is longer than the change's path. Example, change's path is /a/b/c/d
+    //but the requested path is /a/b. In this case the path /a/b has changed
+    //because there is a change that affects to a descendant path. But we have not
+    //guarantees that this means an actual change because it is possible that the new
+    //value given to /a/b/c/d was the same value than the previous value given to
+    //that path. So we are doomed to check the equality aswel, like in the first
+    //conditional
+    const descendant_changes = (this._changes || []).filter(change => isAncestor(path, change.path));
+    if(descendant_changes.length > 0){//there are changes that are descendants of the requested path
+      return descendant_changes.some(descendant_change => {
+        //Now the old_value of the descendant_change is where we have to
+        //check if the value has changed or not, comparing it to the
+        //current change's path value. If change's path is /a/b/c/d
+        //we have to check the current value for that path, and compare
+        //it with the old_value to ensure that the change's value has actually changed
+        //And this has to be made this way because it is nearly impossible to read
+        //the new value given to a path inside the Proxy.
+        const mongo_change_path = descendant_change.path.split('/').slice(1).join('.')
+        const current_value_of_change_path = this.get(mongo_change_path);
+        return !util.isDeepStrictEqual(current_value_of_change_path, descendant_change.old_value);
+      });
+    }
+    return false;//there are not changes that are descendants of the requested path, and there are not any more options, so the requested path has not changed.
+
   }
 }
 

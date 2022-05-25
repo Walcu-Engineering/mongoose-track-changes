@@ -65,7 +65,7 @@ test('Mongoose-track-changes', async () => {
     notify_to: new Array(2).fill(0).map(() => mongoose.Types.ObjectId()),
     done_by: mongoose.Types.ObjectId(),
   };
-  saved_task.getPreviousValue('');
+  const prev = saved_task.getPreviousValue('/notification/notify_to/0');
   debugger;
 });
 

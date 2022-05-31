@@ -118,11 +118,15 @@ const changesTracker = schema => {
     const $setProxy = new Proxy(doc.$set, proxy_handler);
     const setProxy = new Proxy(doc.set, proxy_handler);
     const markModifiedProxy = new Proxy(doc.markModified, proxy_handler);
-    doc.$set = $setProxy;
-    doc.set = setProxy;
-    doc.markModified = markModifiedProxy;
+    doc.$set = $setProxy; //This is used internally by mongoose.
+    doc.set = setProxy; //To intercept the calls when a document is updated using the set method, like myDocument.set('some.path', new_value);
+    doc.markModified = markModifiedProxy; //To intercept document updated using the dot notation like myDocument.some.path = new_value;
   });
 
+  /*
+   * This middleware sets the plugin when a new document is created through
+   * myModel(document_definition) and it has not been saved yet to the database
+   */
   schema.pre('save', function(next){
     if(this.isNew){
       const $setProxy = new Proxy(this.$set, proxy_handler);

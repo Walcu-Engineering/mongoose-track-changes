@@ -50,17 +50,63 @@ const undo = (doc, change) => {
   }
 }
 
+/*
+ * DARK MAGIC HERE. BE CAREFUL OR YOU COULD HARM YOURSELF.
+ * The first thing that we do inside the Proxy is to throw an error
+ * because we want the stack trace. This means that we want to know from
+ * where this function has been called from, and the only way to know this
+ * is from an error stack property.
+ *
+ * WHY DO WE NEED TO KNOW WHERE THIS FUNCTION HAS BEEN CALLED FROM?
+ *
+ * In Mongoose there are 2 ways of updating a document:
+ * A) Using model.set
+ *   Example: mymodel.set('very.nested.path.here', value);
+ * B) Using the dot notation
+ *   Example: mymodel.very.nested.path.here = value;
+ * When you update a inner array using model.set mongoose calls recursively
+ * _markModified for every single path path, and when a inner path part is an
+ * array, Mongoose Proxies the Array, marks it with Proxy._markModified using
+ * the key as the root path.
+ *
+ * What does this mean?
+ * This means that if you update a document like this: 
+ * mymodel.set('very.nested.path.here', value) the path 'very.nested.path.here'
+ * is an array, eventually this function will be called with the path 'here' as
+ * if 'here' was a valid path, and it is not. This only happens when you want to
+ * update a deeply nested path that is an array and you want to change the whole
+ * array and the only way to detect this is to check in the call stack if there
+ * is any call to Proxy._markModified. However if the path is a single nested like
+ * {a: ['elem1', 'elem2']} there will be also a call for the path 'a' as the root
+ * path that will match the condition described above, and for this case will be
+ * legitime, but we don't care becasue this will be detected firstly by the set
+ * proxied call.
+ *
+ * So, if the "set" function is used to update a document, then this function
+ * will be called by both, set and markModified. That's why we have to check
+ * if a change already exists in the array.
+ *
+ * And if a document is updated with the dot notation, then only markModified is used.
+ */
 const proxy_handler = {
   apply: function (target, this_arg, arglist){
-    const path = '/' + arglist[0].split('.').filter(p => p).join('/');
-    const old_value = this_arg.get(arglist[0]);
-    const change = {path, old_value};
-    if(this_arg._changes){
-      if(!this_arg._changes.some(change => change.path === path && util.isDeepStrictEqual(old_value, change.old_value))){//This change does not exist yet. (the same change could already exist because markModified is recursive
-        this_arg._changes.unshift(change); //we insert the changes at the beggining of the array because if we have to revert the changes it is not neccesary to revert the array.
+    let stack = [];
+    try {
+      throw new Error();
+    }catch(error){
+      stack = error.stack.split('\n').slice(1).map(stack_line => stack_line.split('at')[1].trim().split(' ')[0]);
+    }
+    if(stack.every(call => call !== 'Proxy._markModified')){
+      const path = '/' + arglist[0].split('.').filter(p => p).join('/');
+      const old_value = this_arg.get(arglist[0]);
+      const change = {path, old_value};
+      if(this_arg._changes){
+        if(!this_arg._changes.some(change => change.path === path && util.isDeepStrictEqual(old_value, change.old_value))){//This change does not exist yet. (the same change could already exist because markModified is recursive
+          this_arg._changes.unshift(change); //we insert the changes at the beggining of the array because if we have to revert the changes it is not neccesary to revert the array.
+        }
+      }else{
+        this_arg._changes = [change];
       }
-    }else{
-      this_arg._changes = [change];
     }
     const newtarget = target.bind(this_arg);
     newtarget(...arglist);

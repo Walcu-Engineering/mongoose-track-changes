@@ -249,7 +249,7 @@ const changesTracker = schema => {
    *
    * @param path: String with the format JSON pointer as defined in RFC6901
    */
-  schema.methods.pathHasChanged = function(path){
+  schema.methods.pathHasChanged = function(path = ''){
     if(typeof(path) !== 'string'){
       throw new Error('path must be a string');
     }

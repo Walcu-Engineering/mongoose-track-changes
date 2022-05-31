@@ -1,6 +1,6 @@
 const util = require('util');
 
-const getPathValue = (doc, path) => path.split('/').filter(p => p).reduce((subpath_part_value, subpath_part, i, path_array) => {
+const getPathValue = (doc, path = '') => path.split('/').filter(p => p).reduce((subpath_part_value, subpath_part, i, path_array) => {
   if(subpath_part_value == null){
     if(i < path_array.length - 1) return {};
     return subpath_part_value;

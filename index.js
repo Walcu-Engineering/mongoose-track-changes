@@ -221,10 +221,10 @@ const changesTracker = schema => {
         const shortest_path = affected_changes // if requested path is /a/b/c/d but there is a change for the path /a/b we have to undo the whole /a/b path to take the old value for the requested path. And the same way if the requested path is /a and there is a change that affects to /a/b/c we have to undo everything for /a. And the values that have not changed will be pointers.
           .reduce((current_shortest_path, {path}) => path.length > current_shortest_path.length ? current_shortest_path : path, path);
         const shortest_path_subdocument = shortest_path.length === 0 ? this : this.get(shortest_path.split('/').slice(1).join('.')); //This is the value that have to be reverted
-        const rerooted_affected_changes = affected_changes.map(change => {//now we have to change the path for the changes because the root document has changed.
-          change.path = path.length > 0 ? change.path.split(shortest_path)[1] : change.path;
-          return change;
-        });
+        const rerooted_affected_changes = affected_changes.map(change => ({//now we have to change the path for the changes because the root document has changed.
+          path: path.length > 0 ? change.path.split(shortest_path)[1] : change.path,
+          old_value: change.old_value,
+        }));
         const old_value = rerooted_affected_changes.reduce((reverted, change) => undo(reverted, change), shortest_path_subdocument);
         const rerooted_requested_path = path.split(shortest_path)[1];
         return getPathValue(old_value, rerooted_requested_path);

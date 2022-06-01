@@ -30,6 +30,7 @@ document that will be enough to achieve whatever you wish to accomplish.
 This plugin provide two helper methods available in all models, and they should be enough to to achieve whatever you wish:
 ### `pathHasChanged`
   **Parameters**
+
   - `path`: (Optional) A string representing a path in JSON Pointer format as defined by the [RFC 6901](https://datatracker.ietf.org/doc/html/rfc6901)
     *Default value is empty string because according to the [RFC 6901](https://datatracker.ietf.org/doc/html/rfc6901) empty string stands for the root path*
 

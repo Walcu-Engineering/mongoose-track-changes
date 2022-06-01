@@ -104,7 +104,7 @@ const proxy_handler = {
       const change = {path, old_value};
       if(this_arg.$locals.changes){
         if(!this_arg.$locals.changes.some(change => change.path === path && util.isDeepStrictEqual(old_value, change.old_value))){//This change does not exist yet. (the same change could already exist because markModified is recursive
-          this_arg.$locals.changes.unshift(change); //we insert the changes at the beggining of the array because if we have to revert the changes it is not neccesary to revert the array.
+          this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
         }
       }else{
         this_arg.$locals.changes = [change];

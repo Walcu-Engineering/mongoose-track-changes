@@ -6,7 +6,7 @@ way for the developer. It allows to restore the previous value for any given pat
 in a very easy, performant and efficient way.
 
 ## Installation and usage
-For install this plugin at this moment we do not provide a npm package, so you will need to do the following:
+For the time being we do not provide an npm package, so in order to install this plugin you will need to do the following:
 ```bash
 npm i --save https://github.com/Walcu-Engineering/mongoose-track-changes
 ```
@@ -50,15 +50,15 @@ This plugin does not support this feature right now and we do not guarantee that
 All the changes are stored in an `array` at runtime in the `$locals.changes` property of the document model.
 
 ## How do I work with the changes?
-You don't need to work with the `$locals.changes` array because this plugin injects 2 helper methods to every
-document that will be enough to achieve whatever you wish to accomplish.
+You don't need to work with the `$locals.changes` array because this plugin injects two helper methods to every
+document that should be enough to achieve whatever you wish to accomplish.
 ## Helpers
 This plugin provide two helper methods available in all models, and they should be enough to achieve whatever you wish:
 ### `pathHasChanged`
   **Parameters**
 
   - `path`: (Optional) A string representing a path in JSON Pointer format as defined by the [RFC 6901](https://datatracker.ietf.org/doc/html/rfc6901)
-    *Default value is empty string because according to the [RFC 6901](https://datatracker.ietf.org/doc/html/rfc6901) empty string stands for the root path*
+    *Default value is empty string
 
   **Returns**
   - `true`: If the `path` specified in the parameter has changed.
@@ -107,7 +107,7 @@ This plugin provide two helper methods available in all models, and they should 
 ### `getPreviousValue`
   **Parameters**
   - `path`: (Optional) A string representing a path in JSON Pointer format as defined by the [RFC 6901](https://datatracker.ietf.org/doc/html/rfc6901)
-      *Default value is empty string because according to the [RFC 6901](https://datatracker.ietf.org/doc/html/rfc6901) empty string stands for the root path*
+      *Default value is empty string
 
   **Returns**
   The previous value for the given path, but we aware of this very important point:
@@ -221,8 +221,8 @@ use the [RFC 6901](https://datatracker.ietf.org/doc/html/rfc6901) JSON Pointer s
 to work with this standard. And as we were seeking for performance, if we stored the path in the MongoDB dotted format, we had
 to convert from [RFC 6901](https://datatracker.ietf.org/doc/html/rfc6901) format to the MongoDB dotted format, losing some performance.
 
-When we though about publishig this plugin, we though to support both formats, but we wanted to keep things simple
-(eventhough the implementation of the core concepts of this plugin is not simple at all).
+When we thought about publishig this plugin, we thought to support both formats, but we wanted to keep things simple
+(even though the implementation of the core concepts of this plugin is not simple at all).
 
 ### This looks cool. Where can I read more information about the implementation?
 You can read the code and the comments where many of the tricky and dark magic things are explained through the comments.

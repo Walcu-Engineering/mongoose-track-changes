@@ -52,7 +52,7 @@ All the changes are stored in an `array` at runtime in the `$locals.changes` pro
 ## How do I work with the changes?
 You don't need to work with the `$locals.changes` array because this plugin injects two helper methods to every
 document that should be enough to achieve whatever you wish to accomplish.
-## Helpers
+## API
 This plugin provide two helper methods available in all models, and they should be enough to achieve whatever you wish:
 ### `pathHasChanged`
   **Parameters**

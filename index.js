@@ -100,12 +100,12 @@ const proxy_handler = {
       const path = '/' + arglist[0].split('.').filter(p => p).join('/');
       const old_value = this_arg.get(arglist[0]);
       const change = {path, old_value};
-      if(this_arg._changes){
-        if(!this_arg._changes.some(change => change.path === path && util.isDeepStrictEqual(old_value, change.old_value))){//This change does not exist yet. (the same change could already exist because markModified is recursive
-          this_arg._changes.unshift(change); //we insert the changes at the beggining of the array because if we have to revert the changes it is not neccesary to revert the array.
+      if(this_arg.$locals.changes){
+        if(!this_arg.$locals.changes.some(change => change.path === path && util.isDeepStrictEqual(old_value, change.old_value))){//This change does not exist yet. (the same change could already exist because markModified is recursive
+          this_arg.$locals.changes.unshift(change); //we insert the changes at the beggining of the array because if we have to revert the changes it is not neccesary to revert the array.
         }
       }else{
-        this_arg._changes = [change];
+        this_arg.$locals.changes = [change];
       }
     }
     const newtarget = target.bind(this_arg);
@@ -135,13 +135,13 @@ const changesTracker = schema => {
       this.$set = $setProxy;
       this.set = setProxy;
       this.markModified = markModifiedProxy;
-      this._changes = [{op: 'replace', path: '', old_value: undefined}]
+      this.$locals.changes = [{op: 'replace', path: '', old_value: undefined}]
     }
     next();
   });
 
   schema.pre('remove', function(next){
-    this._changes = [{op: 'replace', path: '', old_value: this}]
+    this.$locals.changes = [{op: 'replace', path: '', old_value: this}]
     next();
   });
 
@@ -213,10 +213,10 @@ const changesTracker = schema => {
     if(typeof(path) !== 'string'){
       throw new Error('path must be a string');
     }
-    if((this._changes || []).length > 0){
-      const path_change = this._changes.find(change => change.path === path); //This is for the optimization. This should be the most used case.
+    if((this.$locals.changes || []).length > 0){
+      const path_change = this.$locals.changes.find(change => change.path === path); //This is for the optimization. This should be the most used case.
       if(path_change) return path_change.old_value;//This is the dessirable case
-      const affected_changes = this._changes.filter(change => isAncestor(change.path, path) || isAncestor(path, change.path));
+      const affected_changes = this.$locals.changes.filter(change => isAncestor(change.path, path) || isAncestor(path, change.path));
       if(affected_changes.length > 0){
         const shortest_path = affected_changes // if requested path is /a/b/c/d but there is a change for the path /a/b we have to undo the whole /a/b path to take the old value for the requested path. And the same way if the requested path is /a and there is a change that affects to /a/b/c we have to undo everything for /a. And the values that have not changed will be pointers.
           .reduce((current_shortest_path, {path}) => path.length > current_shortest_path.length ? current_shortest_path : path, path);
@@ -253,12 +253,12 @@ const changesTracker = schema => {
     if(typeof(path) !== 'string'){
       throw new Error('path must be a string');
     }
-    const exact_change = ((this._changes || []).find(change => change.path === path)); //This should be the most common case
+    const exact_change = ((this.$locals.changes || []).find(change => change.path === path)); //This should be the most common case
     if(exact_change && !util.isDeepStrictEqual(exact_change.old_value, this.get(exact_change.path.split('/').slice(1).join('.')))) return true;//we have to do this ugly comparission because the plugin is not able to detecte if a change is giving the same value to the given path than the value that was previous set to that path.
     //Ok, we are not lucky so we have to check if there is any change whose's
     //path is an ancestor for the requested path. Example change's path is /a/b
     //and the requested path is /a/b/c
-    const ancestor_changes = (this._changes || []).filter(change => isAncestor(change.path, path));
+    const ancestor_changes = (this.$locals.changes || []).filter(change => isAncestor(change.path, path));
     //If there are several changes that affect to ancestors, we have to check
     //all the changes because if the nearest ancestor has not the change, it
     //does not mean that another change that is a farther ancestor includes
@@ -295,7 +295,7 @@ const changesTracker = schema => {
     //value given to /a/b/c/d was the same value than the previous value given to
     //that path. So we are doomed to check the equality aswel, like in the first
     //conditional
-    const descendant_changes = (this._changes || []).filter(change => isAncestor(path, change.path));
+    const descendant_changes = (this.$locals.changes || []).filter(change => isAncestor(path, change.path));
     if(descendant_changes.length > 0){//there are changes that are descendants of the requested path
       return descendant_changes.some(descendant_change => {
         //Now the old_value of the descendant_change is where we have to

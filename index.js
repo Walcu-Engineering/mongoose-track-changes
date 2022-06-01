@@ -75,11 +75,13 @@ const undo = (doc, change) => {
  * is an array, eventually this function will be called with the path 'here' as
  * if 'here' was a valid path, and it is not. This only happens when you want to
  * update a deeply nested path that is an array and you want to change the whole
- * array and the only way to detect this is to check in the call stack if there
- * is any call to Proxy._markModified. However if the path is a single nested like
+ * array and the only way to detect this is to check in the call stack if the
+ * last call in the call stack is Object.apply, and the previous one is
+ * Proxy._markModified. If this happens the path is not a legit one, is the array
+ * key name. However if the path is a single nested like
  * {a: ['elem1', 'elem2']} there will be also a call for the path 'a' as the root
  * path that will match the condition described above, and for this case will be
- * legitime, but we don't care becasue this will be detected firstly by the set
+ * legit, but we don't care becasue this will be detected firstly by the set
  * proxied call.
  *
  * So, if the "set" function is used to update a document, then this function
@@ -96,7 +98,7 @@ const proxy_handler = {
     }catch(error){
       stack = error.stack.split('\n').slice(1).map(stack_line => stack_line.split('at')[1].trim().split(' ')[0]);
     }
-    if(stack.every(call => call !== 'Proxy._markModified')){
+    if(!['Object.apply', 'Proxy._markModified'].every((stack_call, i) => stack[i] === stack_call)){
       const path = '/' + arglist[0].split('.').filter(p => p).join('/');
       const old_value = this_arg.get(arglist[0]);
       const change = {path, old_value};

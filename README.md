@@ -5,6 +5,31 @@ This is a [Mongoose](https://github.com/Automattic/mongoose) plugin that tracks 
 way for the developer. It allows to restore the previous value for any given path, or check if a given path has changed
 in a very easy, performant and efficient way.
 
+## Installation and usage
+For install this plugin at this moment we do not provide a npm package, so you will need to do the following:
+```bash
+npm i --save https://github.com/Walcu-Engineering/mongoose-track-changes
+```
+To use the plugin in your code base:
+```javascript
+const trackChangesPlugin = require('mongoose-track-changes');
+const mongoose = require('mongoose');
+
+const notificationSchema = mongoose.Schema({
+  notify_at: Date,
+  notify_to: [{type: mongoose.Schema.Types.ObjectId}],
+  done_by: {type: mongoose.Schema.Types.ObjectId},
+});
+
+notificationSchema.plugin(trackChangesPlugin);
+
+notificationSchema.pre('save', function(next){
+  if(this.pathHasChanged('/done_by')){
+    this.set('notify_to', [this.getPreviousValue('/done_by')]);
+  }
+  next();
+});
+```
 
 ## `Change` specification
 Each change is an object with 2 keys:
@@ -40,7 +65,7 @@ This plugin provide two helper methods available in all models, and they should 
 
   **Example**
   ```javascript
-  const mtc = require('mongoose-keep-changes');
+  const mtc = require('mongoose-track-changes');
   const mongoose = require('mongoose');
 
   const notificationSchema = mongoose.Schema({

@@ -33,6 +33,7 @@ notificationSchema.pre('save', function(next){
 
 ## `Change` specification
 Each change is an object with 2 keys:
+
 **- `path`**
 A string representing a path in JSON Pointer format as defined by the [RFC 6901](https://datatracker.ietf.org/doc/html/rfc6901)
 
@@ -52,7 +53,7 @@ All the changes are stored in an `array` at runtime in the `$locals.changes` pro
 You don't need to work with the `$locals.changes` array because this plugin injects 2 helper methods to every
 document that will be enough to achieve whatever you wish to accomplish.
 ## Helpers
-This plugin provide two helper methods available in all models, and they should be enough to to achieve whatever you wish:
+This plugin provide two helper methods available in all models, and they should be enough to achieve whatever you wish:
 ### `pathHasChanged`
   **Parameters**
 

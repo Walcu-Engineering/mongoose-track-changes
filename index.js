@@ -137,13 +137,13 @@ const changesTracker = schema => {
       this.$set = $setProxy;
       this.set = setProxy;
       this.markModified = markModifiedProxy;
-      this.$locals.changes = [{op: 'replace', path: '', old_value: undefined}]
+      this.$locals.changes = [{path: '', old_value: undefined}]
     }
     next();
   });
 
   schema.pre('remove', function(next){
-    this.$locals.changes = [{op: 'replace', path: '', old_value: this}]
+    this.$locals.changes = [{path: '', old_value: this}]
     next();
   });
 

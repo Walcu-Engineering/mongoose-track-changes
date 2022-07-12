@@ -66,6 +66,7 @@ customerSchema.plugin(changesTracker);
 
 let saved_customer;
 let saved_customer_object;
+let unmodified_customer;
 
 beforeAll(async() => {
   await mongoose.connect(MONGO_URL);
@@ -115,6 +116,7 @@ beforeAll(async() => {
     }]
   });
   await customer.save();
+  unmodified_customer = customer;
   saved_customer = await mongoose.models.Customer.findOne({_id: customer._id});
   saved_customer_object = {
     _id: saved_customer._id,
@@ -231,6 +233,12 @@ describe('mongoose-track-changes', () => {
       const prev = saved_customer.getPreviousValue('');
       expect(prev).toEqual(saved_customer_object);
     });
+    test('prev_doc without changes. Should return undefined', () => {
+      expect(unmodified_customer.getPreviousValue('')).toBe(undefined);
+    })
+    test('Prev deep path value without changes. Should return undefined', () => {
+      expect(unmodified_customer.getPreviousValue('/deep/path')).toBe(undefined);
+    })
   })
 });
 

@@ -224,7 +224,7 @@ const changesTracker = schema => {
           .reduce((current_shortest_path, {path}) => path.length > current_shortest_path.length ? current_shortest_path : path, path);
         const shortest_path_subdocument = shortest_path.length === 0 ? this : this.get(shortest_path.split('/').slice(1).join('.')); //This is the value that have to be reverted
         const rerooted_affected_changes = affected_changes.map(change => ({//now we have to change the path for the changes because the root document has changed.
-          path: path.length > 0 ? change.path.split(shortest_path)[1] : change.path,
+          path: shortest_path.length > 0 ? change.path.split(shortest_path)[1] : change.path,
           old_value: change.old_value,
         }));
         const old_value = rerooted_affected_changes.reduce((reverted, change) => undo(reverted, change), shortest_path_subdocument);

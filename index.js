@@ -1,4 +1,21 @@
 const util = require('util');
+const { EventEmitter } = require('events');
+
+class CustomEmmiter extends EventEmitter {};
+
+const objectLeavesPaths = object => object && typeof object !== 'string' && Object.keys(object).length > 0 && Object.keys(object)
+    .map(key => objectLeavesPaths(object[key])
+      .map(e => [key , ...e]))
+    .reduce((a, b) => a.concat(b), [])
+  || [[]];
+
+const arrayPathToJsonPath = array_path => {
+  if(Array.isArray(array_path)){
+    return array_path.length > 0 ? `/${array_path.join('/')}` : '';
+  }else{
+    throw new Error(`${array_path} is not an array`);
+  }
+}
 
 const getPathValue = (doc, path = '') => path.split('/').filter(p => p).reduce((subpath_part_value, subpath_part, i, path_array) => {
   if(subpath_part_value == null){
@@ -50,64 +67,117 @@ const undo = (doc, change) => {
   }
 }
 
+/**
+ * This function will take the this_arg and will take the unchecked changes.
+ * For the given path of the unchecked change, will take that path current value
+ * and it will be compared with the current value for the change's path.
+ * From that comparission we will determine if that change should be kept, or if it
+ * must be removed, or if it must be transformed to more granular changes.
+ */
+function checkUncheckedChanges(){
+  let unchecked_change_index = this.$locals.changes.findIndex(change => change.unchecked);
+  while(unchecked_change_index >= 0){
+    const unchecked_change = this.$locals.changes[unchecked_change_index];
+    const current_value = getPathValue(this, unchecked_change.path);
+    const old_value = unchecked_change.old_value;
+    const current_value_leave_paths = objectLeavesPaths(current_value?.toObject ? current_value.toObject() : current_value).map(arrayPathToJsonPath)
+    const actual_change_paths = current_value_leave_paths.filter(path => !util.isDeepStrictEqual(getPathValue(current_value, path), getPathValue(old_value, path)));
+    if(actual_change_paths.length === 0){//This means that this is not an actual change, so we are going to mark the path as unvisited because because maybe this path can be changed in the future.
+      const unchecked_change_dotted_path = unchecked_change.path.split('/').slice(1).join('.');
+      this.$locals.visited = this.$locals.visited.filter(visited_dotted_path => unchecked_change_dotted_path !== visited_dotted_path);
+    }
+    const actual_changes = actual_change_paths.map(actual_change_path => {
+      const final_path = unchecked_change.path.concat(actual_change_path);
+      return {path: final_path, old_value: getPathValue(old_value, actual_change_path)};
+    });
+    this.$locals.changes = [
+      ...this.$locals.changes.slice(0, unchecked_change_index),
+      ...actual_changes,
+      ...this.$locals.changes.slice(unchecked_change_index + 1),
+    ];
+    unchecked_change_index = this.$locals.changes.findIndex(change => change.unchecked);
+  }
+}
+
 /*
  * DARK MAGIC HERE. BE CAREFUL OR YOU COULD HARM YOURSELF.
- * The first thing that we do inside the Proxy is to throw an error
- * because we want the stack trace. This means that we want to know from
- * where this function has been called from, and the only way to know this
- * is from an error stack property.
- *
- * WHY DO WE NEED TO KNOW WHERE THIS FUNCTION HAS BEEN CALLED FROM?
- *
  * In Mongoose there are 2 ways of updating a document:
  * A) Using model.set
  *   Example: mymodel.set('very.nested.path.here', value);
  * B) Using the dot notation
  *   Example: mymodel.very.nested.path.here = value;
- * When you update a inner array using model.set mongoose calls recursively
- * _markModified for every single path path, and when a inner path part is an
- * array, Mongoose Proxies the Array, marks it with Proxy._markModified using
- * the key as the root path.
  *
- * What does this mean?
- * This means that if you update a document like this: 
- * mymodel.set('very.nested.path.here', value) the path 'very.nested.path.here'
- * is an array, eventually this function will be called with the path 'here' as
- * if 'here' was a valid path, and it is not. This only happens when you want to
- * update a deeply nested path that is an array and you want to change the whole
- * array and the only way to detect this is to check in the call stack if the
- * last call in the call stack is Object.apply, and the previous one is
- * Proxy._markModified. If this happens the path is not a legit one, is the array
- * key name. However if the path is a single nested like
- * {a: ['elem1', 'elem2']} there will be also a call for the path 'a' as the root
- * path that will match the condition described above, and for this case will be
- * legit, but we don't care becasue this will be detected firstly by the set
- * proxied call.
+ * When you use 'set', this function will be call the first
+ * time with with an arglist of 2 elements, the first one is
+ * the path in dotted notation, and the second one is the new
+ * value that is going to be given to the path.
  *
- * So, if the "set" function is used to update a document, then this function
- * will be called by both, set and markModified. That's why we have to check
- * if a change already exists in the array.
+ * However this is true only for paths that are simple types,
+ * and do not contain anywhere in the path any array, because
+ * in such case the path is called several times.
  *
- * And if a document is updated with the dot notation, then only markModified is used.
+ * Thats why we have to check if we have already visited the
+ * path, if we have already visited that path it is not
+ * necessary to check it again because we only need the oldest
+ * change.
+ *
+ * When you set a inner array value with the "=" assignation
+ * then the arglist does not give us the new value for the
+ * given path, and that's why we have to introduce an
+ * unchecked change, because we cannot guarantee that the change
+ * is a valid one, so we emit an event in order to check that
+ * unchecked changes after the execution of the proxy middlewares
+ * have finished.
  */
 const proxy_handler = {
   apply: function (target, this_arg, arglist){
-    let stack = [];
-    try {
-      throw new Error();
-    }catch(error){
-      stack = error.stack.split('\n').slice(1).map(stack_line => stack_line.split('at')[1].trim().split(' ')[0]);
-    }
-    if(!['Object.apply', 'Proxy._markModified'].every((stack_call, i) => stack[i] === stack_call)){
-      const path = '/' + arglist[0].split('.').filter(p => p).join('/');
-      const old_value = this_arg.get(arglist[0]);
-      const change = {path, old_value};
-      if(this_arg.$locals.changes){
-        if(!this_arg.$locals.changes.some(change => change.path === path && util.isDeepStrictEqual(old_value, change.old_value))){//This change does not exist yet. (the same change could already exist because markModified is recursive
-          this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
-        }
+    if(!(this_arg.$locals.visited || []).includes(arglist[0]) && arglist[1] && !arglist[1].constructor.model){//The path has not been visited yet or it is a nested document value
+      if(this_arg.$locals.visited){
+        if(!arglist[1].$locals) this_arg.$locals.visited.push(arglist[0]);
       }else{
-        this_arg.$locals.changes = [change];
+        if(!arglist[1].$locals) this_arg.$locals.visited = [arglist[0]];
+      }
+      if(arglist.length > 1){//This is a legit call
+        const jsonpath = '/' + arglist[0].split('.').filter(p => p).join('/');
+        const jsonpath_old_value = this_arg.get(arglist[0]);
+        const jsonpath_new_value = arglist[1];
+        if(!jsonpath_new_value.$locals){//This is not a Embbeded document
+          if(typeof(jsonpath_new_value) === 'object'){//In this case we are going to explore the nested paths
+            const new_value_paths = objectLeavesPaths(jsonpath_new_value.toObject ? jsonpath_new_value.toObject() : jsonpath_new_value).map(arrayPathToJsonPath);
+            const paths_to_change = new_value_paths.filter(path => (this_arg.$locals.changes || []).every(change => change.path !== path));//we take only the paths that don't have changes yet, because when we undo changes, we return to the oldest change, so the intermediate changes don't make sense.
+            for(const nested_path of paths_to_change){
+              const old_path_value = getPathValue(jsonpath_old_value, nested_path);
+              const new_path_value = getPathValue(jsonpath_new_value, nested_path);
+              if(!util.isDeepStrictEqual(old_path_value, new_path_value)){//This is going to be an actual change, because the old value is different to the new value.
+                const change = {path: jsonpath.concat(nested_path), old_value: old_path_value};
+                if(this_arg.$locals.changes){
+                  this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
+                }else{
+                  this_arg.$locals.changes = [change];
+                }
+              }
+            }
+          }else{//new value is a primitive value
+            if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath) && !util.isDeepStrictEqual(jsonpath_old_value, jsonpath_new_value)){//The new value is not the same than the old value, so it is an actual change, and there is not yet any change for the given path
+              const change = {path: jsonpath, old_value: jsonpath_old_value};
+              if(this_arg.$locals.changes){
+                this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
+              }else{
+                this_arg.$locals.changes = [change];
+              }
+            }
+          }
+        }else{//This is a embbeded document and we cannot check the new value for the given path
+          if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath)){//There is not any change for this path, so we can introduce it. Otherwise we skip it because if we undo the changes we are going to restore the oldest one.
+            const change = {path: jsonpath, old_value: jsonpath_old_value, unchecked: true};//we are marking the changes that we could not check if they were actual changes, and we will have to check them afterwards
+            if(this_arg.$locals.changes){
+              this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
+            }else{
+              this_arg.$locals.changes = [change];
+            }
+            this_arg.$locals.mtcEmitter.emit('checkUncheckedChanges');
+          }
+        }
       }
     }
     const newtarget = target.bind(this_arg);
@@ -123,6 +193,9 @@ const changesTracker = schema => {
     doc.$set = $setProxy; //This is used internally by mongoose.
     doc.set = setProxy; //To intercept the calls when a document is updated using the set method, like myDocument.set('some.path', new_value);
     doc.markModified = markModifiedProxy; //To intercept document updated using the dot notation like myDocument.some.path = new_value;
+    doc.$locals.mtcEmitter = new CustomEmmiter();
+    const runCheck = () => setImmediate(checkUncheckedChanges.bind(doc));
+    doc.$locals.mtcEmitter.on('checkUncheckedChanges', runCheck);
   });
 
   /*
@@ -138,6 +211,9 @@ const changesTracker = schema => {
       this.set = setProxy;
       this.markModified = markModifiedProxy;
       this.$locals.changes = [{path: '', old_value: undefined}]
+      this.$locals.mtcEmitter = new CustomEmmiter();
+      const runCheck = () => setInmmediate(checkUncheckedChanges.bind(this));
+      this.$locals.mtcEmitter.on('checkUncheckedChanges', runCheck);
     }
     next();
   });

@@ -332,7 +332,7 @@ const changesTracker = schema => {
       throw new Error('path must be a string');
     }
     const exact_change = ((this.$locals.changes || []).find(change => change.path === path)); //This should be the most common case
-    if(exact_change && !util.isDeepStrictEqual(exact_change.old_value, this.get(exact_change.path.split('/').slice(1).join('.')))) return true;//we have to do this ugly comparission because the plugin is not able to detecte if a change is giving the same value to the given path than the value that was previous set to that path.
+    if(exact_change) return true;//
     //Ok, we are not lucky so we have to check if there is any change whose's
     //path is an ancestor for the requested path. Example change's path is /a/b
     //and the requested path is /a/b/c
@@ -389,7 +389,6 @@ const changesTracker = schema => {
       });
     }
     return false;//there are not changes that are descendants of the requested path, and there are not any more options, so the requested path has not changed.
-
   }
 }
 

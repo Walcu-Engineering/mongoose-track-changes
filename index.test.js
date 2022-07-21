@@ -251,10 +251,26 @@ describe('mongoose-track-changes', () => {
     });
     test('prev_doc without changes. Should return undefined', () => {
       expect(unmodified_customer.getPreviousValue('')).toBe(undefined);
-    })
+    });
     test('Prev deep path value without changes. Should return undefined', () => {
       expect(unmodified_customer.getPreviousValue('/deep/path')).toBe(undefined);
-    })
-  })
+    });
+  });
+  describe('was', () => {
+    test('was("/conctacts/0/phones", ["Test contact 1 phone 1", "Test contact 1 phone 2"]) should be true', () => {
+      expect(saved_customer.was('/contacts/0/phones', ["Test contact 1 phone 1", "Test contact 1 phone 2"])).toBe(true);
+    });
+    test('was("/conctacts/0/phones", ["new phone 1", "new phone 2"]) should be false', () => {
+      expect(saved_customer.was('/contacts/0/phones', ["new phone 1", "new phone 2"])).toBe(false);
+    });
+  });
+  describe('is', () => {
+    test('is("/conctacts/0/phones", ["Test contact 1 phone 1", "Test contact 1 phone 2"]) should be false', () => {
+      expect(saved_customer.is('/contacts/0/phones', ["Test contact 1 phone 1", "Test contact 1 phone 2"])).toBe(false);
+    });
+    test('is("/conctacts/0/phones", ["new phone 1", "new phone 2"]) should be true', () => {
+      expect(saved_customer.is('/contacts/0/phones', ["new phone 1", "new phone 2"])).toBe(true);
+    });
+  });
 });
 

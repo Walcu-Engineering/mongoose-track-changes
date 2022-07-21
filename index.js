@@ -390,6 +390,32 @@ const changesTracker = schema => {
     }
     return false;//there are not changes that are descendants of the requested path, and there are not any more options, so the requested path has not changed.
   }
+
+  /**
+   * This methods returns true if the current value for the given path is the
+   * same value that the one received by the second arugment, and false if
+   * otherwise.
+   *
+   * @param path: String with the format JSON pointer as defined in RFC6901
+   * @param value: Any value
+   * returns: Boolean.
+   */
+  schema.methods.is = function(path = '', value){
+    return util.isDeepStrictEqual(getPathValue(this, path), value);
+  }
+
+  /**
+   * This methods returns true if the previous value for the given path is was
+   * the same value that the one received by the second arugment, and false if
+   * otherwise.
+   *
+   * @param path: String with the format JSON pointer as defined in RFC6901
+   * @param value: Any value
+   * returns: Boolean.
+   */
+  schema.methods.was = function(path = '', value){
+    return util.isDeepStrictEqual(this.getPreviousValue(path), value);
+  }
 }
 
 module.exports = changesTracker;

@@ -194,6 +194,7 @@ const changesTracker = schema => {
     doc.set = setProxy; //To intercept the calls when a document is updated using the set method, like myDocument.set('some.path', new_value);
     doc.markModified = markModifiedProxy; //To intercept document updated using the dot notation like myDocument.some.path = new_value;
     doc.$locals.mtcEmitter = new CustomEmmiter();
+    doc.$locals.changes = [];
     const runCheck = () => setImmediate(checkUncheckedChanges.bind(doc));
     doc.$locals.mtcEmitter.on('checkUncheckedChanges', runCheck);
   });

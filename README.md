@@ -207,6 +207,22 @@ This plugin provide two helper methods available in all models, and they should 
   //Prints 'I am changing this from the prev'
   ```
   So be very very careful with this.
+---
+### `is` (Available from v 1.2.0)
+  **Parameters**
+  - `path`: A string representing a path in JSON Pointer format as defined by the [RFC 6901](https://datatracker.ietf.org/doc/html/rfc6901)
+  - `value`: Any value
+
+  **Returns**
+  Boolean. True if the current value for the given path is equals to the second argument value. False otherwise.
+---
+### `was` (Available from v 1.2.0)
+  **Parameters**
+  - `path`: A string representing a path in JSON Pointer format as defined by the [RFC 6901](https://datatracker.ietf.org/doc/html/rfc6901)
+  - `value`: Any value
+
+  **Returns**
+  Boolean. True if the original value before any change for the given path was equals to the second argument value. False otherwise.
 
 ## Other technical questions
 ### The changes are stored in any particular order?

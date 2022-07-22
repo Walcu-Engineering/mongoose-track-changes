@@ -425,6 +425,41 @@ const changesTracker = schema => {
   schema.methods.was = function(path = '', value){
     return util.isDeepStrictEqual(this.getPreviousValue(path), value);
   }
+
+  /**
+   * This method returns a new instance of the current model and resets and injects
+   * the plugin on the new generated model.
+   *
+   * This method is useful when you want to do further changes in a model in a
+   * post middleware. If you make changes in a post middleware to the already
+   * saved model, you will trigger again the pre-middlewares for that model
+   * with an extra change made. However if you reacted in the pre-middlewares
+   * taking into account the previous changes, then you may activate again
+   * the same pre and maybe post middlewares for the given model, creating an
+   * infinite loop.
+   *
+   * However, if you clone the document, then you are not going to repeat the
+   * middlewares, but the cloned model must be injected with the plugin
+   * in order to be able to register the changes that you have done in the
+   * post middleware, and react to that changes in the subsequent pre
+   * middlewares, but without taking into account the previous changes
+   * already made.
+   *
+   * @returns: cloned model with the plugin inyected and changes array reset
+   */
+  schema.methods.clone = function(){
+    const new_document = new this.constructor(this);
+    const $setProxy = new Proxy(this.$set, proxy_handler);
+    const setProxy = new Proxy(this.set, proxy_handler);
+    const markModifiedProxy = new Proxy(new_document.markModified, proxy_handler);
+    new_document.$set = $setProxy;
+    new_document.set = setProxy;
+    new_document.markModified = markModifiedProxy;
+    new_document.$locals.mtcEmitter = new CustomEmmiter();
+    const runCheck = () => setInmmediate(checkUncheckedChanges.bind(new_document));
+    new_document.$locals.mtcEmitter.on('checkUncheckedChanges', runCheck);
+    return new_document;
+  }
 }
 
 module.exports = changesTracker;

@@ -226,6 +226,327 @@ This plugin provide two helper methods available in all models, and they should 
   **Returns**
   Boolean. True if the original value before any change for the given path was equals to the second argument value. False otherwise.
 
+---
+### `clone` (Available from v 1.3.0)
+  **No parameters**
+
+  **Returns**
+  Cloned Model with the plugin injected and the changes array reset to empty array.
+
+  **Use cases**
+  The `clone` method is usefull when you want to make changes to an already saved document in a `post-save` middleware. Why? Because if you
+  make changes to the same document, that document instance will have all the previous changes that have already happened, so when you
+  execute the `save` call over the document, the `pre-save` middleware will trigger again and could produce an infinite loop.
+
+  **Example**
+
+  Take this schema definition with the middlewares:
+  ```javascript
+  const schema = new mongoose.Schema({
+    path1: String,
+    path2: String,
+    path3: String,
+  });
+
+  schema.pre('save', function(next){
+    if(this.pathHasChanged('/path1')){
+      this.path2 = 'Path 1 changed';
+    }
+    next();
+  });
+
+  schema.post('save', async function(document){
+    if(this.pathHasChanged('/path2')){
+      document.path3 = 'Path 2 updated in pre middleware';
+      document.save();
+    }
+  });
+
+  schema.post('save', function(document){
+    if(this.pathHasChanged('/path3')){
+      sideEffect();
+    }
+  });
+  ```
+  Now take this example and let's analyze the process:
+  ```javascript
+  const myModel = await mongoose.models.mymodel.findById(someid);
+  myModel.path1 = "Changing path 1";
+  await myModel.save();
+  ```
+  In this case when the line `myModel.path1 = "Changing path 1"` is executed, in the changes array we are going to have this:
+  ```javascript
+  [{path: "/path1", old_value: "Old's path1 value"}]
+  ```
+  And when the `save` method is called, we are going to go through the `pre-save` middlewares.
+  So first we are going to go through this middleware:
+  ```javascript
+  schema.pre('save', function(next){
+    if(this.pathHasChanged('/path1')){
+      this.path2 = 'Path 1 changed';
+    }
+  });
+  ```
+  This line will be true:
+  ```javascript
+  this.pathHasChanged('/path1')`
+  ```
+  so the next line will be executed:
+  ```javascript
+  this.path2 = 'Path 1 changed';
+  ```
+  And now the changes array will have this value:
+  ```javascript
+  [
+    {path: "/path2", old_value: "Old's path2 value"},
+    {path: "/path1", old_value: "Old's path1 value"}
+  ]
+  ```
+  Now the document is saved because there are not more `pre-save` middlewares, and now we start the `post-save` middlewares:
+  ```javascript
+  schema.post('save', function(document){
+    if(this.pathHasChanged('/path2')){
+      document.path3 = 'Path 2 updated in pre middleware';
+      document.save();
+    }
+  });
+  ```
+  Now the execution of this line:
+  ```javascript
+  this.pathHasChanged('/path2')
+  ```
+  will resolve to `true`, so we will enter the `if`, and we will update the document through:
+  ```javascript
+  document.path3 = 'Path 2 updated in pre middleware';
+  ```
+  Which will update the changes array and now that array will be:
+  ```javascript
+  [
+    {path: "/path3", old_value: "Old's path3 value"},
+    {path: "/path2", old_value: "Old's path2 value"},
+    {path: "/path1", old_value: "Old's path1 value"}
+  ]
+  ```
+  Now the `save` method is called and guest what.... this is going to dispatch the execution of the `pre-save` middlewares again:
+  ```javascript
+  schema.pre('save', function(next){
+    if(this.pathHasChanged('/path1')){
+      this.path2 = 'Path 1 changed';
+    }
+  });
+  ```
+  The statement
+  ```javascript
+  this.pathHasChanged('/path1')
+  ```
+  will resolve to `true` and the line
+  ```javascript
+  this.path2 = 'Path 1 changed';
+  ```
+  will execute, although in this case the plugin won't insert another change because it will detect that current value is
+  the same than the new value that we want to set, so we will skip it.
+
+  Anyway, after this middleware execution we will write again to the database and we the `post-save` middleware will be
+  executed again:
+  ```javascript
+  schema.post('save', function(document){
+    if(this.pathHasChanged('/path2')){
+      document.path3 = 'Path 2 updated in pre middleware';
+      document.save();
+    }
+  });
+  ```
+  The 
+  ```javascript
+  this.pathHasChanged('/path2')
+  ```
+  will resolve to `true` because the changes array still is:
+  ```javascript
+  [
+    {path: "/path3", old_value: "Old's path3 value"},
+    {path: "/path2", old_value: "Old's path2 value"},
+    {path: "/path1", old_value: "Old's path1 value"}
+  ]
+  ```
+  So we will enter inside the `if` and the line
+  ```javascript
+  document.path3 = 'Path 2 updated in pre middleware';
+  ```
+  will be executed although any new change will be inserted because of the same reason given for the `pre-save` middleware case.
+  But then the `save` method will be called again, and the `pre-save` middlewares will be called again... causing the infinite loop.
+
+  In order to avoid this problem we need to call the `clone` method that will reset the plugin:
+  ```javascript
+  const schema = new mongoose.Schema({
+    path1: String,
+    path2: String,
+    path3: String,
+  });
+
+  schema.pre('save', function(next){
+    if(this.pathHasChanged('/path1')){
+      this.path2 = 'Path 1 changed';
+    }
+    next();
+  });
+
+  schema.post('save', async function(document){
+    if(this.pathHasChanged('/path2')){
+      const cloned = document.clone();
+      cloned.path3 = 'Path 2 updated in pre middleware';
+      await cloned.save();
+    }
+  });
+
+  schema.post('save', function(document){
+    if(this.pathHasChanged('/path3')){
+      sideEffect();
+    }
+  });
+  ```
+  So now we are going to repeat the exercise but using the `clone` method:
+  ```javascript
+  const myModel = await mongoose.models.mymodel.findById(someid);
+  myModel.path1 = "Changing path 1";
+  await myModel.save();
+  ```
+  As in the previous case
+  ```javascript
+  myModel.path1 = "Changing path 1"`
+  ```
+  is executed and in the changes array we are going to have this:
+  ```javascript
+  [{path: "/path1", old_value: "Old's path1 value"}]
+  ```
+  And when the `save` method is called, we are going to go through the `pre-save` middlewares.
+  So first we are going to go through this middleware:
+  ```javascript
+  schema.pre('save', function(next){
+    if(this.pathHasChanged('/path1')){
+      this.path2 = 'Path 1 changed';
+    }
+  });
+  ```
+  This line will be true:
+  ```javascript
+  this.pathHasChanged('/path1')`
+  ```
+  so the next line will be executed:
+  ```javascript
+  this.path2 = 'Path 1 changed';
+  ```
+  And now the changes array will have this value:
+  ```javascript
+  [
+    {path: "/path2", old_value: "Old's path2 value"},
+    {path: "/path1", old_value: "Old's path1 value"}
+  ]
+  ```
+  Now the document is saved because there are not more `pre-save` middlewares, and now we start the `post-save` middlewares:
+  ```javascript
+  schema.post('save', async function(document){
+    if(this.pathHasChanged('/path2')){
+      const cloned = document.clone();
+      cloned.path3 = 'Path 2 updated in pre middleware';
+      await cloned.save();
+    }
+  });
+  ```
+  Now the execution of this line:
+  ```javascript
+  this.pathHasChanged('/path2')
+  ```
+  will resolve to `true`, so we will enter the `if`, and we create a clone of the document:
+  ```javascript
+  const cloned = document.clone();
+  ```
+  And now instead of updating the original document we are going to update the cloned one:
+  ```javascript
+  cloned.path3 = 'Path 2 updated in pre middleware';
+  ```
+  Now if we check the changes of the cloned model we will have:
+  ```javascript
+  [{path: "/path3", old_value: "Old's path3 value"}]
+  ```
+  Now the `save` method is called:
+  ```javascript
+  await cloned.save();
+  ```
+  And the `pre-save` middlewares are triggered for this new instance:
+  ```javascript
+  schema.pre('save', function(next){
+    if(this.pathHasChanged('/path1')){
+      this.path2 = 'Path 1 changed';
+    }
+    next();
+  });
+  ```
+  Now this statement:
+  ```javascript
+  this.pathHasChanged('/path1')
+  ```
+  will resolve to `false` because this instance's change's array is
+  ```javascript
+  [{path: "/path3", old_value: "Old's path3 value"}]
+  ```
+  So the code for this `pre-save` middleware will not execute, the actual `save` in the
+  data base will happen, and now the `post-save` middlewares are trigger for this cloned
+  model instance:
+  ```javascript
+  schema.post('save', async function(document){
+    if(this.pathHasChanged('/path2')){
+      const cloned = document.clone();
+      cloned.path3 = 'Path 2 updated in pre middleware';
+      await cloned.save();
+    }
+  });
+  ```
+  The statement
+  ```javascript
+  this.pathHasChanged('/path2')
+  ```
+  Will resolve to `false`, so the `post-save` middleware will be skipped, and the next `post-save`
+  middleware will be executed for this cloned instance of the cloned model:
+  ```javascript
+  schema.post('save', function(document){
+    if(this.pathHasChanged('/path3')){
+      sideEffect();
+    }
+  });
+  ```
+  The statement 
+  ```javascript
+  this.pathHasChanged('/path3')
+  ```
+  Will resolve to `true` because remember that we are still executing this middlewares for the cloned
+  model, and the cloned model changes array is just at this point:
+  ```javascript
+  [{path: "/path3", old_value: "Old's path3 value"}]
+  ```
+  So the `sideEffect` call will happen and this `post-save` middleware will finish its execution.
+
+  Once this last `post-save` middleware finish, then the `await save()` from the first `post-save`
+  middleware call where we made the clone will finish, and the last `post-save` middleware for the
+  original model will be executed:
+  ```javascript
+  schema.post('save', function(document){
+    if(this.pathHasChanged('/path3')){
+      sideEffect();
+    }
+  });
+  ```
+  The statement
+  ```javascript
+  this.pathHasChanged('/path3')
+  ```
+  will resolve to `false` because now the changes array will be:
+  ```javascript
+  [
+    {path: "/path2", old_value: "Old's path2 value"},
+    {path: "/path1", old_value: "Old's path1 value"}
+  ]
+  ```
+
 ## Other technical questions
 ### The changes are stored in any particular order?
 Yes. The changes are inserted at the begining of the changes array because when the changes are undone we undo every

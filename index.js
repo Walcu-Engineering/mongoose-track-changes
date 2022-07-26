@@ -294,7 +294,7 @@ const changesTracker = schema => {
       throw new Error('path must be a string');
     }
     const exact_change = ((this.$locals.changes || []).find(change => change.path === path)); //This should be the most common case
-    if(exact_change) return true;//
+    if(exact_change) return true;
     //Ok, we are not lucky so we have to check if there is any change whose's
     //path is an ancestor for the requested path. Example change's path is /a/b
     //and the requested path is /a/b/c

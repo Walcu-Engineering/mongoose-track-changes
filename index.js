@@ -58,7 +58,7 @@ const undo = (doc, change) => {
  * For the given path of the unchecked change, will take that path current value
  * and it will be compared with the current value for the change's path.
  * From that comparission we will determine if that change should be kept, or if it
- * must be removed, or if it must be transformed to more granular changes.
+ * must be removed.
  */
 function checkUncheckedChanges(){
   let unchecked_change_index = this.$locals.changes.findIndex(change => change.unchecked);

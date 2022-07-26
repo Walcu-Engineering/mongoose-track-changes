@@ -3,28 +3,6 @@ const { EventEmitter } = require('events');
 
 class CustomEmmiter extends EventEmitter {};
 
-const objectLeavesPaths = object => {
-  if(object && typeof object === 'object'){
-    const target = object.toObject ? object.toObject() : object;
-    const target_keys = Object.keys(target);
-    if(target_keys.length > 0){
-      return target_keys
-        .map(key => objectLeavesPaths(object[key])
-          .map(e => [key , ...e]))
-        .reduce((a, b) => a.concat(b), []);
-    }
-  }
-  return [[]];
-}
-
-const arrayPathToJsonPath = array_path => {
-  if(Array.isArray(array_path)){
-    return array_path.length > 0 ? `/${array_path.join('/')}` : '';
-  }else{
-    throw new Error(`${array_path} is not an array`);
-  }
-}
-
 const getPathValue = (doc, path = '') => path.split('/').filter(p => p).reduce((subpath_part_value, subpath_part, i, path_array) => {
   if(subpath_part_value == null){
     if(i < path_array.length - 1) return {};

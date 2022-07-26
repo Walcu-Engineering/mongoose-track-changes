@@ -88,21 +88,13 @@ function checkUncheckedChanges(){
     const unchecked_change = this.$locals.changes[unchecked_change_index];
     const current_value = getPathValue(this, unchecked_change.path);
     const old_value = unchecked_change.old_value;
-    const current_value_leave_paths = objectLeavesPaths(current_value?.toObject ? current_value.toObject() : current_value).map(arrayPathToJsonPath)
-    const actual_change_paths = current_value_leave_paths.filter(path => !util.isDeepStrictEqual(getPathValue(current_value, path), getPathValue(old_value, path)));
-    if(actual_change_paths.length === 0){//This means that this is not an actual change, so we are going to mark the path as unvisited because because maybe this path can be changed in the future.
+    if(!util.isDeepStrictEqual(current_value, old_value)){
+      delete this.$locals.changes[unchecked_change_index].unchecked;
+    }else{//This is not an actual change because the new value is the same than the old one
       const unchecked_change_dotted_path = unchecked_change.path.split('/').slice(1).join('.');
-      this.$locals.visited = this.$locals.visited.filter(visited_dotted_path => unchecked_change_dotted_path !== visited_dotted_path);
+      this.$locals.visited = this.$locals.visited.filter(visited_dotted_path => unchecked_change_dotted_path !== visited_dotted_path);//we have to mark this path as unvisited because maybe it can change in the future
+      this.$locals.changes = this.$locals.changes.filter((_, i) => i !== unchecked_change_index); //we are removing this change from the changes array because it is not an actual change.
     }
-    const actual_changes = actual_change_paths.map(actual_change_path => {
-      const final_path = unchecked_change.path.concat(actual_change_path);
-      return {path: final_path, old_value: getPathValue(old_value, actual_change_path)};
-    });
-    this.$locals.changes = [
-      ...this.$locals.changes.slice(0, unchecked_change_index),
-      ...actual_changes,
-      ...this.$locals.changes.slice(unchecked_change_index + 1),
-    ];
     unchecked_change_index = this.$locals.changes.findIndex(change => change.unchecked);
   }
 }
@@ -150,29 +142,12 @@ const proxy_handler = {
         const jsonpath_old_value = this_arg.get(arglist[0]);
         const jsonpath_new_value = arglist[1];
         if(!jsonpath_new_value.$locals){//This is not a Embbeded document
-          if(typeof(jsonpath_new_value) === 'object'){//In this case we are going to explore the nested paths
-            const new_value_paths = objectLeavesPaths(jsonpath_new_value.toObject ? jsonpath_new_value.toObject() : jsonpath_new_value).map(arrayPathToJsonPath);
-            const paths_to_change = new_value_paths.filter(path => (this_arg.$locals.changes || []).every(change => change.path !== path));//we take only the paths that don't have changes yet, because when we undo changes, we return to the oldest change, so the intermediate changes don't make sense.
-            for(const nested_path of paths_to_change){
-              const old_path_value = getPathValue(jsonpath_old_value, nested_path);
-              const new_path_value = getPathValue(jsonpath_new_value, nested_path);
-              if(!util.isDeepStrictEqual(old_path_value, new_path_value)){//This is going to be an actual change, because the old value is different to the new value.
-                const change = {path: jsonpath.concat(nested_path), old_value: old_path_value};
-                if(this_arg.$locals.changes){
-                  this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
-                }else{
-                  this_arg.$locals.changes = [change];
-                }
-              }
-            }
-          }else{//new value is a primitive value
-            if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath) && !util.isDeepStrictEqual(jsonpath_old_value, jsonpath_new_value)){//The new value is not the same than the old value, so it is an actual change, and there is not yet any change for the given path
-              const change = {path: jsonpath, old_value: jsonpath_old_value};
-              if(this_arg.$locals.changes){
-                this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
-              }else{
-                this_arg.$locals.changes = [change];
-              }
+          if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath) && !util.isDeepStrictEqual(jsonpath_old_value, jsonpath_new_value)){//The new value is not the same than the old value, so it is an actual change, and there is not yet any change for the given path
+            const change = {path: jsonpath, old_value: jsonpath_old_value};
+            if(this_arg.$locals.changes){
+              this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
+            }else{
+              this_arg.$locals.changes = [change];
             }
           }
         }else{//This is a embbeded document and we cannot check the new value for the given path

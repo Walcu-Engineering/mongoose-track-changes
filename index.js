@@ -306,8 +306,11 @@ const changesTracker = schema => {
       //check if the value has changed or not, but now we cannot use the
       //requested path because if the requested path was '/a/b/c/d/e' and
       //the ancestor path is '/a/b/c', we have to check the subpath
-      //'/d/e'. So we have to extract the subpath from the requested path
-      const subpath = path.split(ancestor_change.path)[1];
+      //'/d/e'. So we have to extract the subpath from the requested path.
+      //Unless that the change affects to the root, where if the requested
+      //path is '/a/b/c/d/e' and the change happens in the '' path. In this
+      //case we need to keep the requested path.
+      const subpath = ancestor_change.path ? path.split(ancestor_change.path)[1] : path;
       //Once we have the subpath, we have to read the old value, and we need
       //a function in order to achieve this because we have to take into
       //account this scenario:

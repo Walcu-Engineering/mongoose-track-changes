@@ -109,35 +109,33 @@ function checkUncheckedChanges(){
  */
 const proxy_handler = {
   apply: function (target, this_arg, arglist){
-    if(!(this_arg.$locals.visited || []).includes(arglist[0]) && arglist[1] && !arglist[1].constructor.model){//The path has not been visited yet or it is a nested document value
+    if(!(this_arg.$locals.visited || []).includes(arglist[0]) && arglist.length > 1 && !arglist[1]?.constructor?.model){//The path has not been visited yet or it is a nested document value
       if(this_arg.$locals.visited){
-        if(!arglist[1].$locals) this_arg.$locals.visited.push(arglist[0]);
+        if(!arglist[1]?.$locals) this_arg.$locals.visited.push(arglist[0]);
       }else{
-        if(!arglist[1].$locals) this_arg.$locals.visited = [arglist[0]];
+        if(!arglist[1]?.$locals) this_arg.$locals.visited = [arglist[0]];
       }
-      if(arglist.length > 1){//This is a legit call
-        const jsonpath = '/' + arglist[0].split('.').filter(p => p).join('/');
-        const jsonpath_old_value = this_arg.get(arglist[0]);
-        const jsonpath_new_value = arglist[1];
-        if(!jsonpath_new_value.$locals){//This is not a Embbeded document
-          if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath) && !util.isDeepStrictEqual(jsonpath_old_value, jsonpath_new_value)){//The new value is not the same than the old value, so it is an actual change, and there is not yet any change for the given path
-            const change = {path: jsonpath, old_value: jsonpath_old_value};
-            if(this_arg.$locals.changes){
-              this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
-            }else{
-              this_arg.$locals.changes = [change];
-            }
+      const jsonpath = '/' + arglist[0].split('.').filter(p => p).join('/');
+      const jsonpath_old_value = this_arg.get(arglist[0]);
+      const jsonpath_new_value = arglist[1];
+      if(!jsonpath_new_value?.$locals){//This is not a Embbeded document
+        if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath) && !util.isDeepStrictEqual(jsonpath_old_value, jsonpath_new_value)){//The new value is not the same than the old value, so it is an actual change, and there is not yet any change for the given path
+          const change = {path: jsonpath, old_value: jsonpath_old_value};
+          if(this_arg.$locals.changes){
+            this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
+          }else{
+            this_arg.$locals.changes = [change];
           }
-        }else{//This is a embbeded document and we cannot check the new value for the given path
-          if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath)){//There is not any change for this path, so we can introduce it. Otherwise we skip it because if we undo the changes we are going to restore the oldest one.
-            const change = {path: jsonpath, old_value: jsonpath_old_value, unchecked: true};//we are marking the changes that we could not check if they were actual changes, and we will have to check them afterwards
-            if(this_arg.$locals.changes){
-              this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
-            }else{
-              this_arg.$locals.changes = [change];
-            }
-            this_arg.$locals.mtcEmitter.emit('checkUncheckedChanges');
+        }
+      }else{//This is a embbeded document and we cannot check the new value for the given path
+        if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath)){//There is not any change for this path, so we can introduce it. Otherwise we skip it because if we undo the changes we are going to restore the oldest one.
+          const change = {path: jsonpath, old_value: jsonpath_old_value, unchecked: true};//we are marking the changes that we could not check if they were actual changes, and we will have to check them afterwards
+          if(this_arg.$locals.changes){
+            this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
+          }else{
+            this_arg.$locals.changes = [change];
           }
+          this_arg.$locals.mtcEmitter.emit('checkUncheckedChanges');
         }
       }
     }

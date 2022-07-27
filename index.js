@@ -266,7 +266,7 @@ const changesTracker = schema => {
           old_value: change.old_value,
         }));
         const old_value = rerooted_affected_changes.reduce((reverted, change) => undo(reverted, change), shortest_path_subdocument);
-        const rerooted_requested_path = shortest_path ? path.split(shortest_path)[1] || path;
+        const rerooted_requested_path = shortest_path ? path.split(shortest_path)[1] : path;
         return getPathValue(old_value, rerooted_requested_path);
       }
     }

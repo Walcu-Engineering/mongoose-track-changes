@@ -109,7 +109,7 @@ function checkUncheckedChanges(){
  */
 const proxy_handler = {
   apply: function (target, this_arg, arglist){
-    if(!(this_arg.$locals.visited || []).includes(arglist[0]) && arglist.length > 1 && !arglist[1]?.constructor?.model){//The path has not been visited yet or it is a nested document value
+    if(!(this_arg.$locals.visited || []).includes(arglist[0]) && arglist.length > 1){//The path has not been visited yet or it is a nested document value
       if(this_arg.$locals.visited){
         if(!arglist[1]?.$locals) this_arg.$locals.visited.push(arglist[0]);
       }else{

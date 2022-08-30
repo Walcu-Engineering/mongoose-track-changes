@@ -17,6 +17,8 @@ const isAncestor = (path1, path2) => {
   return path1_parts.every((path1_part, i) => path2_parts[i] === path1_part);
 }
 
+const mutable_array_methods = ['copyWithin', 'fill', 'pop', 'push', 'reverse', 'shift', 'splice']; //This are all the array methods that mutates the array itself
+
 const undo = (doc, change) => {
   if(change.path === ''){
     return change.old_value;
@@ -116,7 +118,34 @@ const proxy_handler = {
         if(!arglist[1]?.$locals) this_arg.$locals.visited = [arglist[0]];
       }
       const jsonpath = '/' + arglist[0].split('.').filter(p => p).join('/');
-      const jsonpath_old_value = this_arg.get(arglist[0]);
+      const jsonpath_old_value = (() => {
+        const old_value = this_arg.get(arglist[0]);
+        //We have to check if we have come here from a method that mutates the array (at this point the array has not been modified yet)
+        //because in that case we have to create a copy of the array. Otherwise we will have the same array and cannot check for the differences
+        //That's why whe have to throw the Error, in order to have access to the call stack to see if we have reached this code from a
+        //mutable array method.
+        if(Array.isArray(old_value)){
+          let call_stack = [];
+          try{
+            throw new Error();
+          }catch(error){
+            call_stack = error.stack.split('\n').slice(2).map(line => line.trim().slice(3).split(' ')[0]);//The 2 first error lines are the word error and the file path where the error happened. In the map we remove the "at " substring, and we keep only the first word that is the function call stack
+          }
+          //When a mutable array method is called inside mongoose, before the actual array mutation happens,
+          //the _markModify function is called, and it is captured by this proxy, so the index before the
+          //mutable array method stack call index, must be _markModified, or "Proxy._markModified" because
+          //mongoose makes Proxies of the Arrays.
+          const mutable_array_call_stack_index = call_stack.findIndex(stack_call_line => mutable_array_methods.some(mutable_method => stack_call_line.includes(mutable_method)));
+          if(mutable_array_call_stack_index > 1 && call_stack[mutable_array_call_stack_index - 1].includes('_markModified')){
+            //return old_value.map(v => v?.constructor ? new v.constructor(v) : v);
+            return old_value.map(x => x);
+          }else{
+            return old_value;
+          }
+        }else{
+          return old_value;
+        }
+      })();
       const jsonpath_new_value = arglist[1];
       if(!jsonpath_new_value?.$locals){//This is not a Embbeded document
         if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath) && !util.isDeepStrictEqual(jsonpath_old_value, jsonpath_new_value)){//The new value is not the same than the old value, so it is an actual change, and there is not yet any change for the given path
@@ -127,7 +156,7 @@ const proxy_handler = {
             this_arg.$locals.changes = [change];
           }
         }
-      }else{//This is a embbeded document and we cannot check the new value for the given path
+      }else{//This is a embbeded document and we cannot check the new value for the given path, we also have to check that the changed path is not an array because that case is handled earlier.
         if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath)){//There is not any change for this path, so we can introduce it. Otherwise we skip it because if we undo the changes we are going to restore the oldest one.
           const change = {path: jsonpath, old_value: jsonpath_old_value, unchecked: true};//we are marking the changes that we could not check if they were actual changes, and we will have to check them afterwards
           if(this_arg.$locals.changes){

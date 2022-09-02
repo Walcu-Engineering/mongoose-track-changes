@@ -26,22 +26,23 @@ const undo = (doc, change) => {
   if(change.path === ''){
     return change.old_value;
   }else{
-    const [, change_first_path_part, ...rest_path_parts ] = change.path.split('/');
+    const change_path_splitted = change.path.split('/');
+    const change_first_path_part = change_path_splitted[1];
+    const rest_path_parts = change_path_splitted.splice(2);
     if(doc && (doc.schema || doc.constructor.name === 'Object')){//Under this reverted types we have to go deeper with the recursion
-      return (doc.schema && Object.values(doc.schema.paths).map(schema => [schema.path, doc.get(schema.path)])
-        || doc.constructor.name === 'Object' && Object.entries(doc)
-      ).map(([key, value]) => {
+      const doc_keys = doc.schema && Object.keys(doc.schema.paths) || doc.constructor.name === 'Object' && Object.keys(doc)
+      const result = {};
+      for(const key of doc_keys){
+        const value = doc.schema && doc.get(key) || doc[key];
         if(change_first_path_part === key){//This change affects to this key, so we go deep inside
           const rerooted_change_pointer = rest_path_parts.join('/'); //if the rerooted change's path is the empty string, we don't want the path to be /.
           const rerooted_change = {path: rerooted_change_pointer.length > 0 ? `/${rerooted_change_pointer}` : rerooted_change_pointer, old_value: change.old_value};
-          return [key, undo(value, rerooted_change)];
+          result[key] = undo(value, rerooted_change);
         }else{//This change does not affect to this object key, so we return the current document key value
-          return [key, value];
+          result[key] = value;
         }
-      }).reduce((c, n) => {
-        c[n[0]] = n[1]; //we use this notation instead of ({...c, ...n}) because it is cheaper in the consumption of resources, and we want to be the fastest we can.
-        return c;
-      }, {});
+      }
+      return result;
     }else if(doc instanceof Array){
       return doc.map((value, index) => {//Here the index will be the first path part from the change's path.
         if(change_first_path_part === String(index)){//This change affects to this item, so we have to go deeper over this item

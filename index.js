@@ -12,9 +12,12 @@ const getPathValue = (doc, path = '') => path.split('/').filter(p => p).reduce((
 }, doc);
 
 const isAncestor = (path1, path2) => {
-  const path1_parts = path1.split('/').slice(1);
-  const path2_parts = path2.split('/').slice(1);
-  return path1_parts.every((path1_part, i) => path2_parts[i] === path1_part);
+  const path1_parts = path1.split('/');
+  const path2_parts = path2.split('/');
+  for(let i = 1; i < path1_parts.length; i++){
+    if(path2_parts[i] !== path1_parts[i]) return false;
+  }
+  return true;
 }
 
 const mutable_array_methods = ['copyWithin', 'fill', 'pop', 'push', 'reverse', 'shift', 'splice']; //This are all the array methods that mutates the array itself

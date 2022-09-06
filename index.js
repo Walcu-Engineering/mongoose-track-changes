@@ -15,37 +15,6 @@ const isAncestor = (path1, path2) => path2.startsWith(path1) && (!path2.at(path1
 
 const mutable_array_methods = ['copyWithin', 'fill', 'pop', 'push', 'reverse', 'shift', 'splice']; //This are all the array methods that mutates the array itself
 
-const setIn = (obj, path, new_value) => {
-  if(path === '') return new_value;
-  let obj_keys = [];
-  if(obj && (obj.schema || obj.constructor.name === 'Object')){//Under this reverted types we have to go deeper with the recursion
-    obj_keys = obj.schema && Object.keys(obj.schema.paths) || obj.constructor.name === 'Object' && Object.keys(obj)
-  }else if(obj instanceof Array){
-    obj_keys = obj.keys();
-  }
-  const path_parts = path.split('/').splice(1);
-  const copy = (obj instanceof Array) ? [] : {};
-  for(const key of obj_keys){
-    if(key !== path_parts[0]) copy[key] = obj[key];
-  }
-  let subdoc_copy = copy;
-  let subdoc = obj;
-  for(let i = 0; i < path_parts.length - 1; i++){
-    if(subdoc[path_parts.at(i)] != null){
-      if(Array.isArray(subdoc[path_parts.at(i)])){
-        subdoc_copy[path_parts.at(i)] = subdoc[path_parts.at(i)].map(x => x.schema ? x._doc : x);
-      }else{
-        subdoc_copy[path_parts.at(i)] = {};
-        Object.assign(subdoc_copy[path_parts.at(i)], subdoc[path_parts.at(i)].schema ? subdoc[path_parts.at(i)]._doc : subdoc[path_parts.at(i)]);
-      }
-    }
-    subdoc_copy = subdoc_copy[path_parts.at(i)];
-    subdoc = subdoc[path_parts.at(i)];
-  }
-  subdoc_copy[path_parts.at(-1)] = new_value;
-  return copy;
-}
-
 const undo = (doc, change) => {
   if(change.path === ''){
     return change.old_value;
@@ -320,8 +289,7 @@ const changesTracker = schema => {
           path: shortest_path.length > 0 ? change.path.split(shortest_path)[1] : change.path,
           old_value: change.old_value,
         }));
-        //const old_value = rerooted_affected_changes.reduce((reverted, change) => undo(reverted, change), shortest_path_subdocument);
-        const old_value = rerooted_affected_changes.reduce((reverted, change) => setIn(reverted, change.path, change.old_value), shortest_path_subdocument);
+        const old_value = rerooted_affected_changes.reduce((reverted, change) => undo(reverted, change), shortest_path_subdocument);
         const rerooted_requested_path = shortest_path ? path.split(shortest_path)[1] : path;
         return getPathValue(old_value, rerooted_requested_path);
       }

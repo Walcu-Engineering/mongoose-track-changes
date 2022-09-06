@@ -38,6 +38,7 @@ const AddressSchema = new mongoose.Schema({
 const customerSchema = mongoose.Schema({
   name: String,
   surname: String,
+  theundefined: String,
   address: {
     type: AddressSchema,
     embedded_field: true,
@@ -180,6 +181,10 @@ describe('mongoose-track-changes', () => {
       });
     });
     describe('Update using dot notation', () => {
+      test('Update path "/theundefined" with saved_custumer.theundefined = "New value"', () => {
+        saved_customer.theundefined = 'New value';
+        expect(saved_customer.pathHasChanged('/theundefined')).toBe(true);
+      });
       test('Update path "/surname" with saved_custumer.surname = "New surname"', () => {
         saved_customer.surname = 'New surname';
         expect(saved_customer.pathHasChanged('/surname')).toBe(true);
@@ -227,6 +232,10 @@ describe('mongoose-track-changes', () => {
     });
   });
   describe('getPreviousValue', () => {
+    test('/theundefined previous value should be undefined', () => {
+      const prev = saved_customer.getPreviousValue('/theundefined');
+      expect(prev).toBe(undefined);
+    });
     test('/contacts/0/phones previous value should be ["Test contact 1 phone 1", "Test contact 1 phone 2"]', () => {
       const prev = saved_customer.getPreviousValue('/contacts/0/phones');
       expect(prev).toEqual(["Test contact 1 phone 1", "Test contact 1 phone 2"]);

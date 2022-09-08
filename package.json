@@ -21,6 +21,9 @@
   },
   "homepage": "https://github.com/Walcu-Engineering/mongoose-track-changes#readme",
   "dependencies": {
+    "@walcu-engineering/getpathvalue": "^1.0.0",
+    "@walcu-engineering/pathhaschanged": "^1.0.0",
+    "@walcu-engineering/previousvalue": "^1.0.0"
   },
   "devDependencies": {
     "jest": "^27.5.1",

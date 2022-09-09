@@ -1,6 +1,6 @@
 {
   "name": "@walcu-engineering/mongoose-track-changes",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "A Mongoose plugin to keep track of the changes that happen over a document",
   "main": "index",
   "scripts": {
@@ -23,7 +23,7 @@
   "dependencies": {
     "@walcu-engineering/getpathvalue": "^1.0.0",
     "@walcu-engineering/pathhaschanged": "^1.0.0",
-    "@walcu-engineering/previousvalue": "^1.0.0"
+    "@walcu-engineering/previousvalue": "^1.1.0"
   },
   "devDependencies": {
     "jest": "^27.5.1",

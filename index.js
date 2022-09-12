@@ -121,7 +121,7 @@ const proxy_handler = {
       }
     }
     const newtarget = target.bind(this_arg);
-    newtarget(...arglist);
+    return newtarget(...arglist);
   }
 };
 

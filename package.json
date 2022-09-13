@@ -22,7 +22,7 @@
   "homepage": "https://github.com/Walcu-Engineering/mongoose-track-changes#readme",
   "dependencies": {
     "@walcu-engineering/getpathvalue": "^1.0.0",
-    "@walcu-engineering/pathhaschanged": "^1.0.0",
+    "@walcu-engineering/pathhaschanged": "^1.0.1",
     "@walcu-engineering/previousvalue": "^1.1.0"
   },
   "devDependencies": {

@@ -139,11 +139,23 @@ const changesTracker = schema => {
     doc.$locals.mtcEmitter.on('checkUncheckedChanges', runCheck);
   });
 
-  /*
-   * This middleware sets the plugin when a new document is created through
-   * myModel(document_definition) and it has not been saved yet to the database
+  schema.pre('remove', function(next){
+    this.$locals.changes = [{path: '', old_value: this}]
+    next();
+  });
+
+  /**
+   * This method is designed in order to inject the plugin when a model is
+   * created using the model's constructor.
+   * In Mongoose when a model is created using this way the post-init hook
+   * is not called, that's why we have to inject it. We have several ways to
+   * inject the plugin, one is to create a pre-save middleware that injects
+   * the plugin when the document is new, however we need that this middleware
+   * is injected in first place, and we cannot assure that this is gonna happen
+   * always.
+   * Whit this method we can control when the plugin should be injected.
    */
-  schema.pre('save', function(next){
+  schema.methods.injectmtc = function(){
     if(this.isNew){
       const $setProxy = new Proxy(this.$set, proxy_handler);
       const setProxy = new Proxy(this.set, proxy_handler);
@@ -156,13 +168,7 @@ const changesTracker = schema => {
       const runCheck = () => setInmmediate(checkUncheckedChanges.bind(this));
       this.$locals.mtcEmitter.on('checkUncheckedChanges', runCheck);
     }
-    next();
-  });
-
-  schema.pre('remove', function(next){
-    this.$locals.changes = [{path: '', old_value: this}]
-    next();
-  });
+  }
 
   schema.methods.getPreviousValue = function(path = ''){
     if(typeof(path) !== 'string'){

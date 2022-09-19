@@ -165,7 +165,7 @@ const changesTracker = schema => {
       this.markModified = markModifiedProxy;
       this.$locals.changes = [{path: '', old_value: undefined}]
       this.$locals.mtcEmitter = new CustomEmmiter();
-      const runCheck = () => setInmmediate(checkUncheckedChanges.bind(this));
+      const runCheck = () => setImmediate(checkUncheckedChanges.bind(this));
       this.$locals.mtcEmitter.on('checkUncheckedChanges', runCheck);
     }
   }

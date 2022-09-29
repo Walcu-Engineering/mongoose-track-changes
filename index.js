@@ -13,19 +13,25 @@ const mutable_array_methods = ['copyWithin', 'fill', 'pop', 'push', 'reverse', '
  * and it will be compared with the current value for the change's path.
  * From that comparission we will determine if that change should be kept, or if it
  * must be removed.
+ *
+ * Since sometimes mongoose calls the markModified function before updating a given value
+ * we set those kind of changes as 'unchecked', and in the next change, or whenever a
+ * function dependant on the changes get called, we checked those unchecked changes to verify
+ * if they are legitimate
  */
 function checkUncheckedChanges(){
-  let unchecked_change_index = this.$locals.changes.findIndex(change => change.unchecked);
-  while(unchecked_change_index >= 0){
-    const unchecked_change = this.$locals.changes[unchecked_change_index];
+  const changes = this.$locals?.changes ?? [];
+  let unchecked_change_index = changes?.findIndex(change => change.unchecked);
+  while (unchecked_change_index >= 0) {
+    const unchecked_change = changes[unchecked_change_index];
     const current_value = getPathValue(this, unchecked_change.path);
     const old_value = unchecked_change.old_value;
-    if(!util.isDeepStrictEqual(current_value, old_value)){
-      delete this.$locals.changes[unchecked_change_index].unchecked;
-    }else{//This is not an actual change because the new value is the same than the old one
+    if (!util.isDeepStrictEqual(current_value, old_value)) {
+      delete changes[unchecked_change_index].unchecked;
+    } else {//This is not an actual change because the new value is the same than the old one
       const unchecked_change_dotted_path = unchecked_change.path.split('/').slice(1).join('.');
       this.$locals.visited = this.$locals.visited.filter(visited_dotted_path => unchecked_change_dotted_path !== visited_dotted_path);//we have to mark this path as unvisited because maybe it can change in the future
-      this.$locals.changes = this.$locals.changes.filter((_, i) => i !== unchecked_change_index); //we are removing this change from the changes array because it is not an actual change.
+      this.$locals.changes = changes.filter((_, i) => i !== unchecked_change_index); //we are removing this change from the changes array because it is not an actual change.
     }
     unchecked_change_index = this.$locals.changes.findIndex(change => change.unchecked);
   }
@@ -65,10 +71,14 @@ const proxy_handler = {
   apply: function (target, this_arg, arglist){
     if(!(this_arg.$locals.visited || []).includes(arglist[0]) && arglist.length > 1){//The path has not been visited yet or it is a nested document value
       if(this_arg.$locals.visited){
-        if(!arglist[1]?.$locals) this_arg.$locals.visited.push(arglist[0]);
+        if(!arglist[1]?.$locals?.visited) this_arg.$locals.visited.push(arglist[0]);
       }else{
-        if(!arglist[1]?.$locals) this_arg.$locals.visited = [arglist[0]];
+        if(!arglist[1]?.$locals?.visited) this_arg.$locals.visited = [arglist[0]];
       }
+      //Process previously unsaved changes before processing new change
+      //See comment on checkUncheckedChanges for a more in-depth explaination
+      //as why is this needed
+      checkUncheckedChanges.baind(this_arg)();
       const jsonpath = '/' + arglist[0].split('.').filter(p => p).join('/');
       const jsonpath_old_value = (() => {
         const old_value = this_arg.get(arglist[0]);
@@ -116,7 +126,6 @@ const proxy_handler = {
           }else{
             this_arg.$locals.changes = [change];
           }
-          this_arg.$locals.mtcEmitter.emit('checkUncheckedChanges');
         }
       }
     }
@@ -135,8 +144,6 @@ const changesTracker = schema => {
     doc.markModified = markModifiedProxy; //To intercept document updated using the dot notation like myDocument.some.path = new_value;
     doc.$locals.mtcEmitter = new CustomEmmiter();
     doc.$locals.changes = [];
-    const runCheck = () => setImmediate(checkUncheckedChanges.bind(doc));
-    doc.$locals.mtcEmitter.on('checkUncheckedChanges', runCheck);
   });
 
   schema.pre('remove', function(next){
@@ -165,8 +172,6 @@ const changesTracker = schema => {
       this.markModified = markModifiedProxy;
       this.$locals.changes = [{path: '', old_value: undefined}]
       this.$locals.mtcEmitter = new CustomEmmiter();
-      const runCheck = () => setImmediate(checkUncheckedChanges.bind(this));
-      this.$locals.mtcEmitter.on('checkUncheckedChanges', runCheck);
     }
   }
 
@@ -174,6 +179,10 @@ const changesTracker = schema => {
     if(typeof(path) !== 'string'){
       throw new Error('path must be a string');
     }
+    //Process previously unsaved changes before obtaining previous value
+    //See comment on checkUncheckedChanges for a more in-depth explaination
+    //as why is this needed
+    checkUncheckedChanges.bind(this)();
     return previousValue(this, this.$locals.changes, path);
   }
 
@@ -181,7 +190,19 @@ const changesTracker = schema => {
     if(typeof(path) !== 'string'){
       throw new Error('path must be a string');
     }
+    //Process previously unsaved changes before checking path changes
+    //See comment on checkUncheckedChanges for a more in-depth explaination
+    //as why is this needed
+    checkUncheckedChanges.bind(this)();
     return pathHasChanged(this, this.$locals.changes, path);
+  }
+
+  schema.methods.getChanges = function(){
+    //Process previously unsaved changes before getting changes
+    //See comment on checkUncheckedChanges for a more in-depth explaination
+    //as why is this needed
+    checkUncheckedChanges.bind(this)();
+    return this.$locals.changes;
   }
 
   /**
@@ -240,8 +261,6 @@ const changesTracker = schema => {
     new_document.set = setProxy;
     new_document.markModified = markModifiedProxy;
     new_document.$locals.mtcEmitter = new CustomEmmiter();
-    const runCheck = () => setInmmediate(checkUncheckedChanges.bind(new_document));
-    new_document.$locals.mtcEmitter.on('checkUncheckedChanges', runCheck);
     return new_document;
   }
 }

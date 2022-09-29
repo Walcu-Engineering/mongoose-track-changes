@@ -116,6 +116,7 @@ beforeAll(async() => {
       },
     }]
   });
+  customer.injectmtc();
   await customer.save();
   unmodified_customer = customer;
   saved_customer = await mongoose.models.Customer.findOne({_id: customer._id});

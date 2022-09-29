@@ -78,7 +78,7 @@ const proxy_handler = {
       //Process previously unsaved changes before processing new change
       //See comment on checkUncheckedChanges for a more in-depth explaination
       //as why is this needed
-      checkUncheckedChanges.baind(this_arg)();
+      checkUncheckedChanges.bind(this_arg)();
       const jsonpath = '/' + arglist[0].split('.').filter(p => p).join('/');
       const jsonpath_old_value = (() => {
         const old_value = this_arg.get(arglist[0]);

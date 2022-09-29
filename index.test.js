@@ -190,33 +190,21 @@ describe('mongoose-track-changes', () => {
         saved_customer.surname = 'New surname';
         expect(saved_customer.pathHasChanged('/surname')).toBe(true);
       });
-      test('Update path "/contacts/0/emails" with contacts.0.emails = ["new email 1", "new email 2"]', (next) => {
+      test('Update path "/contacts/0/emails" with contacts.0.emails = ["new email 1", "new email 2"]', () => {
         saved_customer.contacts[0].emails = ["new email 1", "new email 2"];
-        setTimeout(() => {
-          expect(saved_customer.pathHasChanged('/contacts/0/emails')).toBe(true);
-          next();
-        }, 100)
+        expect(saved_customer.pathHasChanged('/contacts/0/emails')).toBe(true);
       });
-      test('saved_customer.tasks[0].notification.notify_to[2] = saved_customer.tasks[0].notification.notify_to[2] is not a change', (next) => {
+      test('saved_customer.tasks[0].notification.notify_to[2] = saved_customer.tasks[0].notification.notify_to[2] is not a change', () => {
         saved_customer.tasks[0].notification.notify_to[2] = saved_customer.tasks[0].notification.notify_to[2];
-        setTimeout(() => {
-          expect(saved_customer.pathHasChanged('/tasks/0/notification/notify_to/2')).toBe(false);
-          next();
-        }, 100);
+        expect(saved_customer.pathHasChanged('/tasks/0/notification/notify_to/2')).toBe(false);
       });
-      test('saved_customer.tasks[0].notification.notify_to[2] = mongoose.Types.ObjectId() is a change despite we have already "updated" that path', (next) => {
+      test('saved_customer.tasks[0].notification.notify_to[2] = mongoose.Types.ObjectId() is a change despite we have already "updated" that path', () => {
         saved_customer.tasks[0].notification.notify_to[2] = mongoose.Types.ObjectId();
-        setTimeout(() => {
-          expect(saved_customer.pathHasChanged('/tasks/0/notification/notify_to/2')).toBe(true);
-          next();
-        }, 100);
+        expect(saved_customer.pathHasChanged('/tasks/0/notification/notify_to/2')).toBe(true);
       });
-      test('saved_customer.tasks.0.notification.notify_to.1" = mongoose.Types.ObjectId() checking /tasks/0/notification/notify_to/1 is true', (next) => {
+      test('saved_customer.tasks.0.notification.notify_to.1" = mongoose.Types.ObjectId() checking /tasks/0/notification/notify_to/1 is true', () => {
         saved_customer.tasks[0].notification.notify_to[1] = mongoose.Types.ObjectId();
-        setTimeout(() => {
-          expect(saved_customer.pathHasChanged('/tasks/0/notification/notify_to/1')).toBe(true);
-          next();
-        }, 100);
+        expect(saved_customer.pathHasChanged('/tasks/0/notification/notify_to/1')).toBe(true);
       });
     });
     test('Check that path "/contacts/0" has changed because we have changed a descendant path before', () => {

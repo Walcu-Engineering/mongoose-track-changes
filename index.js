@@ -21,7 +21,7 @@ const mutable_array_methods = ['copyWithin', 'fill', 'pop', 'push', 'reverse', '
  */
 function checkUncheckedChanges(){
   const changes = this.$locals?.changes ?? [];
-  let unchecked_change_index = changes?.findIndex(change => change.unchecked) ?? -1;
+  let unchecked_change_index = changes?.findIndex(change => change.unchecked);
   while (unchecked_change_index >= 0) {
     const unchecked_change = changes[unchecked_change_index];
     const current_value = getPathValue(this, unchecked_change.path);

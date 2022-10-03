@@ -197,7 +197,7 @@ const changesTracker = schema => {
     return pathHasChanged(this, this.$locals.changes, path);
   }
 
-  schema.methods.getChanges = function(){
+  schema.methods.getLocalChanges = function(){
     //Process previously unsaved changes before getting changes
     //See comment on checkUncheckedChanges for a more in-depth explaination
     //as why is this needed

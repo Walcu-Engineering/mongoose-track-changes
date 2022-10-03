@@ -1,6 +1,6 @@
 {
   "name": "@walcu-engineering/mongoose-track-changes",
-  "version": "1.11.4",
+  "version": "1.11.5",
   "description": "A Mongoose plugin to keep track of the changes that happen over a document",
   "main": "index",
   "scripts": {

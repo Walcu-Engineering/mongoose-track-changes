@@ -37,6 +37,8 @@ function checkUncheckedChanges(){
   }
 }
 
+const transformToJSObject = obj => obj?.toObject?.() ?? obj;
+
 /*
  * DARK MAGIC HERE. BE CAREFUL OR YOU COULD HARM YOURSELF.
  * In Mongoose there are 2 ways of updating a document:
@@ -81,7 +83,7 @@ const proxy_handler = {
       checkUncheckedChanges.bind(this_arg)();
       const jsonpath = '/' + arglist[0].split('.').filter(p => p).join('/');
       const jsonpath_old_value = (() => {
-        const old_value = this_arg.get(arglist[0]);
+        const old_value = transformToJSObject(this_arg.get(arglist[0]));
         //We have to check if we have come here from a method that mutates the array (at this point the array has not been modified yet)
         //because in that case we have to create a copy of the array. Otherwise we will have the same array and cannot check for the differences
         //That's why whe have to throw the Error, in order to have access to the call stack to see if we have reached this code from a
@@ -108,9 +110,10 @@ const proxy_handler = {
           return old_value;
         }
       })();
+      //We do not transform the possible embeddable document (yet) because the logic is different between them and a plain js object
       const jsonpath_new_value = arglist[1];
       if(!jsonpath_new_value?.$locals){//This is not a Embbeded document
-        if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath) && !util.isDeepStrictEqual(jsonpath_old_value, jsonpath_new_value)){//The new value is not the same than the old value, so it is an actual change, and there is not yet any change for the given path
+        if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath) && !util.isDeepStrictEqual(jsonpath_old_value, transformToJSObject(jsonpath_new_value))){//The new value is not the same than the old value, so it is an actual change, and there is not yet any change for the given path
           const change = {path: jsonpath, old_value: jsonpath_old_value};
           if(this_arg.$locals.changes){
             this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.

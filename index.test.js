@@ -63,6 +63,7 @@ const customerSchema = mongoose.Schema({
   tasks: [taskSchema],
 });
 
+taskSchema.plugin(changesTracker);
 customerSchema.plugin(changesTracker);
 
 let saved_customer;
@@ -71,7 +72,17 @@ let unmodified_customer;
 
 beforeAll(async() => {
   await mongoose.connect(MONGO_URL);
+  // Create models
+  const taskModel = mongoose.model('Task', taskSchema);
   const customerModel = mongoose.model('Customer', customerSchema);
+
+  // Instances of each model
+  const task = taskModel({
+    mixednode: {
+      test: 'test',
+      array: [1, 2, 3, 4],
+    },
+  })
   const customer = customerModel({
     name: 'Test name',
     surname: 'Test surname',
@@ -116,9 +127,15 @@ beforeAll(async() => {
       },
     }]
   });
+
+  // Inject the proxy
+  task.injectmtc();
   customer.injectmtc();
+  await task.save();
   await customer.save();
+  unmodified_task = task;
   unmodified_customer = customer;
+  saved_task = await mongoose.models.Task.findOne({_id: task._id});
   saved_customer = await mongoose.models.Customer.findOne({_id: customer._id});
   saved_customer_object = {
     _id: saved_customer._id,
@@ -180,6 +197,10 @@ describe('mongoose-track-changes', () => {
         saved_customer.set("tasks.0.notification.notify_to.1", mongoose.Types.ObjectId());
         expect(saved_customer.pathHasChanged('/tasks/0/notification/notify_to/1')).toBe(true);
       });
+      test('Update path /mixednode/test using saved_task.set', () => {
+        saved_task.set('mixednode.test', 'new_value');
+        expect(saved_task.pathHasChanged('/mixednode/test')).toBe(true);
+      });
     });
     describe('Update using dot notation', () => {
       test('Update path "/theundefined" with saved_custumer.theundefined = "New value"', () => {
@@ -206,6 +227,12 @@ describe('mongoose-track-changes', () => {
         saved_customer.tasks[0].notification.notify_to[1] = mongoose.Types.ObjectId();
         expect(saved_customer.pathHasChanged('/tasks/0/notification/notify_to/1')).toBe(true);
       });
+      test('Update path /mixednode/test with saved_task.mixednode.test', () => {
+        // Manually marking the path as modified is necessary for mixed paths
+        saved_task.markModified('mixednode.a');
+        saved_task.mixednode['a'] = 'a';
+        expect(saved_task.pathHasChanged('/mixednode/a')).toBe(true);
+      });
     });
     test('Check that path "/contacts/0" has changed because we have changed a descendant path before', () => {
       expect(saved_customer.pathHasChanged('/contacts/0')).toBe(true);
@@ -218,6 +245,9 @@ describe('mongoose-track-changes', () => {
     });
     test('Check that path "/test" that does not exists has not changed', () => {
       expect(saved_customer.pathHasChanged('/test')).toBe(false);
+    });
+    test('Check that path "/mixednode" has changed because a descendant path has changed', () => {
+      expect(saved_task.pathHasChanged('/mixednode')).toBe(true);
     });
   });
   describe('getPreviousValue', () => {
@@ -253,6 +283,10 @@ describe('mongoose-track-changes', () => {
     test('Prev deep path value without changes. Should return undefined', () => {
       expect(unmodified_customer.getPreviousValue('/deep/path')).toBe(undefined);
     });
+    test('prev mixednode.test should be test', () => {
+      const prev = saved_task.getPreviousValue('/mixednode/test');
+      expect(prev).toBe('test');
+    });
   });
   describe('was', () => {
     test('was("/conctacts/0/phones", ["Test contact 1 phone 1", "Test contact 1 phone 2"]) should be true', () => {
@@ -261,6 +295,9 @@ describe('mongoose-track-changes', () => {
     test('was("/conctacts/0/phones", ["new phone 1", "new phone 2"]) should be false', () => {
       expect(saved_customer.was('/contacts/0/phones', ["new phone 1", "new phone 2"])).toBe(false);
     });
+    test('was("/mixednode/test", "test") should be true', () => {
+      expect(saved_task.was('/mixednode/test', "test")).toBe(true);
+    });
   });
   describe('is', () => {
     test('is("/conctacts/0/phones", ["Test contact 1 phone 1", "Test contact 1 phone 2"]) should be false', () => {
@@ -268,6 +305,9 @@ describe('mongoose-track-changes', () => {
     });
     test('is("/conctacts/0/phones", ["new phone 1", "new phone 2"]) should be true', () => {
       expect(saved_customer.is('/contacts/0/phones', ["new phone 1", "new phone 2"])).toBe(true);
+    });
+    test('is("/mixednode/test", "new_value") should be true', () => {
+      expect(saved_task.is('/mixednode/test', "new_value")).toBe(true);
     });
   });
 });

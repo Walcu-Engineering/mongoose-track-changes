@@ -39,6 +39,35 @@ function checkUncheckedChanges(){
 
 const transformToJSObject = obj => obj?.toObject?.() ?? obj;
 
+const getOldValue = (this_arg, arglist) => {
+  const old_value = transformToJSObject(this_arg.get(arglist[0]));
+  //We have to check if we have come here from a method that mutates the array (at this point the array has not been modified yet)
+  //because in that case we have to create a copy of the array. Otherwise we will have the same array and cannot check for the differences
+  //That's why whe have to throw the Error, in order to have access to the call stack to see if we have reached this code from a
+  //mutable array method.
+  if(Array.isArray(old_value)){
+    let call_stack = [];
+    try{
+      throw new Error();
+    }catch(error){
+      call_stack = error.stack.split('\n').slice(2).map(line => line.trim().slice(3).split(' ')[0]);//The 2 first error lines are the word error and the file path where the error happened. In the map we remove the "at " substring, and we keep only the first word that is the function call stack
+    }
+    //When a mutable array method is called inside mongoose, before the actual array mutation happens,
+    //the _markModify function is called, and it is captured by this proxy, so the index before the
+    //mutable array method stack call index, must be _markModified, or "Proxy._markModified" because
+    //mongoose makes Proxies of the Arrays.
+    const mutable_array_call_stack_index = call_stack.findIndex(stack_call_line => mutable_array_methods.some(mutable_method => stack_call_line.includes(mutable_method)));
+    if(mutable_array_call_stack_index > 1 && call_stack[mutable_array_call_stack_index - 1].includes('_markModified')){
+      //return old_value.map(v => v?.constructor ? new v.constructor(v) : v);
+      return old_value.map(x => x);
+    }else{
+      return old_value;
+    }
+  }else{
+    return old_value;
+  }
+}
+
 /*
  * DARK MAGIC HERE. BE CAREFUL OR YOU COULD HARM YOURSELF.
  * In Mongoose there are 2 ways of updating a document:
@@ -82,34 +111,7 @@ const proxy_handler = {
       //as why is this needed
       checkUncheckedChanges.bind(this_arg)();
       const jsonpath = '/' + arglist[0].split('.').filter(p => p).join('/');
-      const jsonpath_old_value = (() => {
-        const old_value = transformToJSObject(this_arg.get(arglist[0]));
-        //We have to check if we have come here from a method that mutates the array (at this point the array has not been modified yet)
-        //because in that case we have to create a copy of the array. Otherwise we will have the same array and cannot check for the differences
-        //That's why whe have to throw the Error, in order to have access to the call stack to see if we have reached this code from a
-        //mutable array method.
-        if(Array.isArray(old_value)){
-          let call_stack = [];
-          try{
-            throw new Error();
-          }catch(error){
-            call_stack = error.stack.split('\n').slice(2).map(line => line.trim().slice(3).split(' ')[0]);//The 2 first error lines are the word error and the file path where the error happened. In the map we remove the "at " substring, and we keep only the first word that is the function call stack
-          }
-          //When a mutable array method is called inside mongoose, before the actual array mutation happens,
-          //the _markModify function is called, and it is captured by this proxy, so the index before the
-          //mutable array method stack call index, must be _markModified, or "Proxy._markModified" because
-          //mongoose makes Proxies of the Arrays.
-          const mutable_array_call_stack_index = call_stack.findIndex(stack_call_line => mutable_array_methods.some(mutable_method => stack_call_line.includes(mutable_method)));
-          if(mutable_array_call_stack_index > 1 && call_stack[mutable_array_call_stack_index - 1].includes('_markModified')){
-            //return old_value.map(v => v?.constructor ? new v.constructor(v) : v);
-            return old_value.map(x => x);
-          }else{
-            return old_value;
-          }
-        }else{
-          return old_value;
-        }
-      })();
+      const jsonpath_old_value = getOldValue(this_arg, arglist);
       //We do not transform the possible embeddable document (yet) because the logic is different between them and a plain js object
       const jsonpath_new_value = arglist[1];
       if(!jsonpath_new_value?.$locals){//This is not a Embbeded document
@@ -134,14 +136,39 @@ const proxy_handler = {
     }
     const newtarget = target.bind(this_arg);
     return newtarget(...arglist);
-  }
+  },
+};
+
+const markModifier_proxy= {
+  apply: function (target, this_arg, arglist){
+    if (!(this_arg.$locals.visited || []).includes(arglist[0])) { //The path has not been visited yet
+      if (this_arg.$locals.visited) {
+        if (!arglist[1]?.$locals?.visited) this_arg.$locals.visited.push(arglist[0]);
+      } else {
+        if(!arglist[1]?.$locals?.visited) this_arg.$locals.visited = [arglist[0]];
+      }
+
+      //Process previously unsaved changes before processing new change
+      //See comment on checkUncheckedChanges for a more in-depth explaination
+      //as why is this needed
+      checkUncheckedChanges.bind(this_arg)();
+      const jsonpath = '/' + arglist[0].split('.').filter(p => p).join('/');
+      const jsonpath_old_value = getOldValue(this_arg, arglist);
+      const change = {path: jsonpath, old_value: jsonpath_old_value, unchecked: true};
+      if (this_arg.$locals.changes) {
+        this_arg.$locals.changes.unshift(change);
+      }
+    }
+    const newtarget = target.bind(this_arg);
+    return newtarget(...arglist);
+  },
 };
 
 const changesTracker = schema => {
   schema.post('init', function(doc){
     const $setProxy = new Proxy(doc.$set, proxy_handler);
     const setProxy = new Proxy(doc.set, proxy_handler);
-    const markModifiedProxy = new Proxy(doc.markModified, proxy_handler);
+    const markModifiedProxy = new Proxy(doc.markModified, markModifier_proxy);
     doc.$set = $setProxy; //This is used internally by mongoose.
     doc.set = setProxy; //To intercept the calls when a document is updated using the set method, like myDocument.set('some.path', new_value);
     doc.markModified = markModifiedProxy; //To intercept document updated using the dot notation like myDocument.some.path = new_value;
@@ -169,7 +196,7 @@ const changesTracker = schema => {
     if(this.isNew){
       const $setProxy = new Proxy(this.$set, proxy_handler);
       const setProxy = new Proxy(this.set, proxy_handler);
-      const markModifiedProxy = new Proxy(this.markModified, proxy_handler);
+      const markModifiedProxy = new Proxy(this.markModified, markModifier_proxy);
       this.$set = $setProxy;
       this.set = setProxy;
       this.markModified = markModifiedProxy;

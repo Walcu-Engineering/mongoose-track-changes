@@ -39,6 +39,14 @@ const customerSchema = mongoose.Schema({
   name: String,
   surname: String,
   theundefined: String,
+  nested: mongoose.Schema({
+    nested: String,
+    nested2: String,
+  }),
+  nested2: mongoose.Schema({
+    nested: String,
+    nested2: String,
+  }),
   address: {
     type: AddressSchema,
     embedded_field: true,
@@ -86,6 +94,14 @@ beforeAll(async() => {
   const customer = customerModel({
     name: 'Test name',
     surname: 'Test surname',
+    nested: {
+      nested: "Hello",
+      nested2: "Hello2",
+    },
+    nested2: {
+      nested: "2Hello",
+      nested2: "2Hello2",
+    },
     address: {
       coordinates: {
         lat: 40,
@@ -143,6 +159,16 @@ beforeAll(async() => {
     name: 'Test name',
     surname: 'Test surname',
     address: saved_customer.address,
+    nested: {
+      _id: saved_customer.nested._id,
+      nested: "Hello",
+      nested2: "Hello2",
+    },
+    nested2: {
+      _id: saved_customer.nested2._id,
+      nested: "2Hello",
+      nested2: "2Hello2",
+    },
     contacts: [{
       _id: saved_customer.contacts[0]._id,
       name: 'Test contact 1 name',
@@ -233,6 +259,16 @@ describe('mongoose-track-changes', () => {
         saved_task.mixednode['a'] = 'a';
         expect(saved_task.pathHasChanged('/mixednode/a')).toBe(true);
       });
+      test('Update nested.nested2 path', () => {
+        saved_customer.nested.nested2 = 'Bye2';
+        expect(saved_customer.pathHasChanged('/nested/nested2')).toBe(true);
+        expect(saved_customer.pathHasChanged('/nested/nested')).toBe(false);
+      });
+      test('Update nested2 path', () => {
+        saved_customer.nested2 = { nested: "2Bye", nested2: "2Hello2" };
+        expect(saved_customer.pathHasChanged('/nested2/nested')).toBe(true);
+        expect(saved_customer.pathHasChanged('/nested2/nested2')).toBe(false);
+      });
     });
     test('Check that path "/contacts/0" has changed because we have changed a descendant path before', () => {
       expect(saved_customer.pathHasChanged('/contacts/0')).toBe(true);
@@ -273,12 +309,30 @@ describe('mongoose-track-changes', () => {
       };
       expect(prev).toEqual(control);
     });
+    test('Previous nested value', () => {
+      expect(saved_customer.getPreviousValue('/nested')).toStrictEqual(saved_customer_object.nested);
+    });
+    test('Previous nested.nested value', () => {
+      expect(saved_customer.getPreviousValue('/nested/nested')).toBe(saved_customer_object.nested.nested);
+    });
+    test('Previous nested.nested2 value', () => {
+      expect(saved_customer.getPreviousValue('/nested/nested2')).toBe(saved_customer_object.nested.nested2);
+    });
+    test('Previous nested2.nested value', () => {
+      expect(saved_customer.getPreviousValue('/nested2/nested')).toBe(saved_customer_object.nested2.nested);
+    });
+    test('Previous nested2.nested2 value', () => {
+      expect(saved_customer.getPreviousValue('/nested2/nested2')).toBe(saved_customer_object.nested2.nested2);
+    });
     test('prev_doc', () => {
       const prev = saved_customer.getPreviousValue('');
       expect(prev).toEqual(saved_customer_object);
     });
     test('prev_doc without changes. Should return undefined', () => {
       expect(unmodified_customer.getPreviousValue('')).toBe(undefined);
+    });
+    test('Prev deep path value without changes. Should return undefined', () => {
+      expect(unmodified_customer.getPreviousValue('/deep/path')).toBe(undefined);
     });
     test('Prev deep path value without changes. Should return undefined', () => {
       expect(unmodified_customer.getPreviousValue('/deep/path')).toBe(undefined);

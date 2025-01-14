@@ -238,6 +238,7 @@ describe('mongoose-track-changes', () => {
       });
       test('Multiple operations on the same unexisting path, initial true', () => {
         saved_task.set("initial_true", true);
+        expect(saved_task.pathHasChanged("/initial_true")).toBe(false);
         saved_task.set("initial_true", false);
         expect(saved_task.pathHasChanged("/initial_true")).toBe(true);
       });

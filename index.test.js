@@ -1,6 +1,6 @@
 const MONGO_URL = 'mongodb://localhost/mongoose-track-changes';
 const mongoose = require('mongoose');
-const changesTracker = require('./index'); 
+const changesTracker = require('./index');
 
 const notificationSchema = mongoose.Schema({
   notify_at: Date,
@@ -14,6 +14,9 @@ const taskSchema = new mongoose.Schema({
   description: String,
   mixednode: {type: mongoose.Schema.Types.Mixed},
   numbertype: Number,
+  initial_empty: Boolean,
+  initial_true: Boolean,
+  set_value_check_visited: String,
 });
 
 
@@ -86,6 +89,7 @@ beforeAll(async() => {
 
   // Instances of each model
   const task = taskModel({
+    initial_true: true,
     mixednode: {
       test: 'test',
       array: [1, 2, 3, 4],
@@ -197,7 +201,7 @@ beforeAll(async() => {
     }],
   };
   return 0;
-})
+});
 
 afterAll(async() => {
   await mongoose.disconnect();
@@ -226,6 +230,21 @@ describe('mongoose-track-changes', () => {
       test('Update path /mixednode/test using saved_task.set', () => {
         saved_task.set('mixednode.test', 'new_value');
         expect(saved_task.pathHasChanged('/mixednode/test')).toBe(true);
+      });
+      test('Multiple operations on the same unexisting path, initial empty', () => {
+        saved_task.set("initial_empty", undefined);
+        saved_task.set("initial_empty", true);
+        expect(saved_task.pathHasChanged("/initial_empty")).toBe(true);
+      });
+      test('Multiple operations on the same unexisting path, initial true', () => {
+        saved_task.set("initial_true", true);
+        saved_task.set("initial_true", false);
+        expect(saved_task.pathHasChanged("/initial_true")).toBe(true);
+      });
+      test('Set field and check if visited', () => {
+        expect(saved_task.$locals.visited.includes('set_value_check_visited')).toBe(false);
+        saved_task.set("set_value_check_visited", "some value");
+        expect(saved_task.$locals.visited.includes('set_value_check_visited')).toBe(true);
       });
     });
     describe('Update using dot notation', () => {

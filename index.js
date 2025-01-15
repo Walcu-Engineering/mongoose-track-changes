@@ -68,6 +68,14 @@ const getOldValue = (this_arg, arglist) => {
   }
 }
 
+const markVisited = (document, change) => {
+  if (document.$locals.visited) {
+    if (!change[1]?.$locals?.visited) document.$locals.visited.push(change[0]);
+  } else {
+    if (!change[1]?.$locals?.visited) document.$locals.visited = [change[0]];
+  }
+}
+
 /*
  * DARK MAGIC HERE. BE CAREFUL OR YOU COULD HARM YOURSELF.
  * In Mongoose there are 2 ways of updating a document:
@@ -101,11 +109,6 @@ const getOldValue = (this_arg, arglist) => {
 const proxy_handler = {
   apply: function (target, this_arg, arglist){
     if(!(this_arg.$locals.visited || []).includes(arglist[0]) && arglist.length > 1){//The path has not been visited yet or it is a nested document value
-      if(this_arg.$locals.visited){
-        if(!arglist[1]?.$locals?.visited) this_arg.$locals.visited.push(arglist[0]);
-      }else{
-        if(!arglist[1]?.$locals?.visited) this_arg.$locals.visited = [arglist[0]];
-      }
       //Process previously unsaved changes before processing new change
       //See comment on checkUncheckedChanges for a more in-depth explaination
       //as why is this needed
@@ -116,6 +119,7 @@ const proxy_handler = {
       const jsonpath_new_value = arglist[1];
       if(!jsonpath_new_value?.$locals){//This is not a Embbeded document
         if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath) && !util.isDeepStrictEqual(jsonpath_old_value, transformToJSObject(jsonpath_new_value))){//The new value is not the same than the old value, so it is an actual change, and there is not yet any change for the given path
+          markVisited(this_arg, arglist);
           const change = {path: jsonpath, old_value: jsonpath_old_value};
           if(this_arg.$locals.changes){
             this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
@@ -125,6 +129,7 @@ const proxy_handler = {
         }
       }else{//This is a embbeded document and we cannot check the new value for the given path, we also have to check that the changed path is not an array because that case is handled earlier.
         if((this_arg.$locals.changes || []).every(change => change.path !== jsonpath)){//There is not any change for this path, so we can introduce it. Otherwise we skip it because if we undo the changes we are going to restore the oldest one.
+          markVisited(this_arg, arglist);
           const change = {path: jsonpath, old_value: jsonpath_old_value, unchecked: true};//we are marking the changes that we could not check if they were actual changes, and we will have to check them afterwards
           if(this_arg.$locals.changes){
             this_arg.$locals.changes.unshift(change); //we insert the changes at the begining of the array because if we have to revert the changes it is not neccesary to revert the array.
@@ -142,11 +147,7 @@ const proxy_handler = {
 const markModifier_proxy= {
   apply: function (target, this_arg, arglist){
     if (!(this_arg.$locals.visited || []).includes(arglist[0])) { //The path has not been visited yet
-      if (this_arg.$locals.visited) {
-        if (!arglist[1]?.$locals?.visited) this_arg.$locals.visited.push(arglist[0]);
-      } else {
-        if(!arglist[1]?.$locals?.visited) this_arg.$locals.visited = [arglist[0]];
-      }
+      markVisited(this_arg, arglist);
 
       //Process previously unsaved changes before processing new change
       //See comment on checkUncheckedChanges for a more in-depth explaination
